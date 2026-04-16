@@ -877,6 +877,16 @@ class Inmate {
     this.disiplin = 20 + Math.random()*80;   // 0–100, erodes when unrest is high
     this.dominans = 10 + Math.random()*90;   // 0–100, drifts slowly toward mean
 
+    // Individual traits
+    const TEMP_VALS = ['calm','normal','aggressive'];
+    const SOC_VALS  = ['introvert','normal','dominant'];
+    const ST_VALS   = ['low','medium','high'];
+    const IR_VALS   = ['positive','neutral','negative'];
+    this.temperament       = TEMP_VALS[Math.floor(Math.random()*3)];
+    this.sosial            = SOC_VALS [Math.floor(Math.random()*3)];
+    this.stressTolerance   = ST_VALS  [Math.floor(Math.random()*3)];
+    this.isolationResponse = IR_VALS  [Math.floor(Math.random()*3)];
+
     // Sentence in simulated days
     this.soningstidTotalt = 20 + Math.floor(Math.random()*61);  // 20–80 dager
     this.soningstidIgjen  = this.soningstidTotalt;
@@ -1168,6 +1178,8 @@ function tick() {
       // Night: unrest drops slowly while inmates sleep in their cells
       delta = -0.8;
     } else {
+      const socMult = { introvert: 0.6, normal: 1.0, dominant: 1.4 }[inm.sosial] ?? 1.0;
+      let proximityDelta = 0;
       for (const other of GS.inmates) {
         if (other === inm) continue;
         const dx = other.px - inm.px, dy = other.py - inm.py;
@@ -1175,18 +1187,21 @@ function tick() {
         if (d < TILE*3) {
           // Same category → less tension; different → more
           const factor = other.kategori === inm.kategori ? 0.15 : 0.35;
-          delta += factor * (1 - d/(TILE*3));
+          proximityDelta += factor * (1 - d/(TILE*3));
           // Same gang → calming; different gang → tension
           const gangFactor = other.groupId === inm.groupId ? -0.10 : 0.32;
-          delta += gangFactor * (1 - d/(TILE*3));
+          proximityDelta += gangFactor * (1 - d/(TILE*3));
         }
       }
+      delta += proximityDelta * socMult;
       for (const g of GS.guards) {
         const dx = g.px - inm.px, dy = g.py - inm.py;
         const d = Math.sqrt(dx*dx + dy*dy);
         if (d < TILE*5) delta -= 1.1 * (1 - d/(TILE*5));
       }
-      delta += (22 - inm.unrest) * 0.012; // gentle mean-reversion
+      const stressTgt = { low: 15, medium: 22, high: 32 }[inm.stressTolerance] ?? 22;
+      delta += (stressTgt - inm.unrest) * 0.012; // mean-reversion to trait target
+      delta *= { calm: 0.65, normal: 1.0, aggressive: 1.5 }[inm.temperament] ?? 1.0;
     }
     inm.unrest = Math.max(0, Math.min(100, inm.unrest + delta));
 
@@ -1514,6 +1529,15 @@ function updateUI() {
       <div class="dr"><span class="dl">Disiplin</span><span class="dv">${Math.round(sel.disiplin)}%</span></div>
       <div class="dr"><span class="dl">Dominans</span><span class="dv">${Math.round(sel.dominans)}%</span></div>
       <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>
+      <div class="dr" style="margin-top:6px;border-top:1px solid #1e2228;padding-top:6px">
+        <span class="dl" style="color:#6a7080;font-size:10px">Egenskaper</span>
+      </div>
+      <div class="dr"><span class="dv" style="color:#8098b0;font-size:10px">${
+        ({'calm':'Rolig temperament','normal':'Normalt temperament','aggressive':'Aggressivt temperament'}[sel.temperament]||sel.temperament)
+      } · ${ ({'introvert':'Introvert','normal':'Sosial','dominant':'Dominant'}[sel.sosial]||sel.sosial) }</span></div>
+      <div class="dr"><span class="dv" style="color:#8098b0;font-size:10px">${
+        ({'low':'Stresssensitiv','medium':'Middels stresstoleranse','high':'Stressresistent'}[sel.stressTolerance]||sel.stressTolerance)
+      } · ${ ({'positive':'Trives i isolat','neutral':'Nøytral isolasjon','negative':'Tåler ikke isolat'}[sel.isolationResponse]||sel.isolationResponse) }</span></div>
       ${(() => {
         const rs = unrestReasons(sel);
         if (!rs.length) return '';
@@ -1622,6 +1646,8 @@ function saveGame() {
       hygiene: inm.hygiene, disiplin: inm.disiplin, dominans: inm.dominans,
       soningstidTotalt: inm.soningstidTotalt, soningstidIgjen: inm.soningstidIgjen,
       cafState: inm.cafState, sleepState: inm.sleepState,
+      temperament: inm.temperament, sosial: inm.sosial,
+      stressTolerance: inm.stressTolerance, isolationResponse: inm.isolationResponse,
     })),
     guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi })),
   };
@@ -1643,6 +1669,10 @@ function loadGame() {
     inm.waypoints = [];
     inm.currentSpotId = null;
     inm.phaseDelay = 0; inm.pendingZone = null;
+    if (!inm.temperament)       inm.temperament       = 'normal';
+    if (!inm.sosial)            inm.sosial            = 'normal';
+    if (!inm.stressTolerance)   inm.stressTolerance   = 'medium';
+    if (!inm.isolationResponse) inm.isolationResponse = 'neutral';
     GS.inmates.push(inm);
   }
   UID = Math.max(...GS.inmates.map(i => i.id)) + 1;
