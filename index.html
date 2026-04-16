@@ -8,16 +8,26 @@
 body {
   background:#0e1012;
   display:flex;
-  align-items:flex-start;
   font-family:'Courier New',monospace;
   color:#b0b0b0;
   height:100vh;
   overflow:hidden;
 }
-canvas { display:block; flex-shrink:0; }
+#canvas-wrap {
+  flex:1;
+  display:flex; align-items:center; justify-content:center;
+  background:#0a0c0e;
+  overflow:hidden;
+}
+canvas {
+  display:block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
 #sidebar {
   width:260px;
-  height:546px;
+  height:100vh;
+  flex:0 0 260px;
   background:#161a1e;
   border-left:2px solid #222830;
   display:flex;
@@ -36,12 +46,40 @@ canvas { display:block; flex-shrink:0; }
 .val.lo { color:#388050; }
 #inmate-section { flex:1; min-height:90px; overflow-y:auto; }
 #inmate-section h3 { font-size:0.6rem; letter-spacing:2px; color:#334; text-transform:uppercase; padding:6px 14px 5px; border-bottom:1px solid #1a1e24; }
-.ir { padding:3px 14px; cursor:pointer; border-left:3px solid transparent; }
-.ir:hover { background:#1c2026; }
-.ir.sel  { background:#1e2632; border-left-color:#c8b460; }
-.ir-name { font-size:0.72rem; color:#aaa; }
-.ub { height:2px; background:#1a1e24; margin-top:2px; border-radius:1px; overflow:hidden; }
-.uf { height:100%; border-radius:1px; transition:width 0.5s; }
+#filter-tabs {
+  display:flex; gap:3px;
+  padding:6px 8px 4px; border-bottom:1px solid #1a1e24;
+  position:sticky; top:0; background:#161a1e; z-index:2;
+}
+.ft {
+  flex:1; text-align:center; cursor:pointer;
+  background:#1a1e24; border:1px solid #252a32; border-radius:3px;
+  padding:4px 3px; font-size:0.56rem; color:#556; letter-spacing:0.3px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.ft:hover { background:#22262e; color:#889; }
+.ft.on    { background:#22293a; border-color:#c8b460; color:#c8b460; }
+.ft-count { font-weight:700; margin-left:2px; }
+.ir-empty { padding:12px; text-align:center; color:#334; font-size:0.65rem; }
+.ir.pinned { border-color:#665030; }
+.ir {
+  padding: 8px 12px;
+  margin: 4px 8px;
+  cursor: pointer;
+  border: 1px solid #1e2228;
+  border-radius: 4px;
+  background: #161a20;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s;
+}
+.ir:hover { background:#1e2430; border-color:#3a4250; }
+.ir.sel  { background:#22293a; border-color:#c8b460; box-shadow:0 0 6px rgba(200,180,96,0.18); }
+.ir-top  { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
+.ir-name { font-size:0.78rem; color:#ccc; font-weight:500; }
+.ir-cell { font-size:0.62rem; color:#556; letter-spacing:1px; }
+.ir-badge{ font-size:0.60rem; font-weight:700; letter-spacing:1px; margin-top:4px; }
+.ub { height:5px; background:#0e1116; border-radius:2px; overflow:hidden; }
+.uf { height:100%; border-radius:2px; transition:width 0.5s; }
 #detail { border-top:1px solid #1e2228; padding:11px 14px; background:#141820; max-height:210px; overflow-y:auto; flex-shrink:0; }
 #detail h4 { font-size:0.76rem; color:#c8b460; margin-bottom:6px; }
 .dr { display:flex; justify-content:space-between; font-size:0.73rem; margin:2px 0; }
@@ -88,15 +126,16 @@ canvas { display:block; flex-shrink:0; }
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon &bull; 2025</p>
+  <p>Panoptikon v0.7.0 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-continue" disabled>Continue</button>
   <button class="mb" id="btn-load" disabled>Load</button>
 </div>
-<canvas id="c"></canvas>
+<div id="canvas-wrap"><canvas id="c"></canvas></div>
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.7.0</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -118,6 +157,12 @@ canvas { display:block; flex-shrink:0; }
   </div>
   <div id="inmate-section">
     <h3>Innsatte</h3>
+    <div id="filter-tabs">
+      <div class="ft on" data-f="all" title="Alle innsatte">Alle <span class="ft-count"></span></div>
+      <div class="ft"    data-f="iso" title="Innsatte på isolat">🔒 Isolat <span class="ft-count"></span></div>
+      <div class="ft"    data-f="con" title="Nylig i konflikt (siste 12s)">💥 Konflikt <span class="ft-count"></span></div>
+      <div class="ft"    data-f="hot" title="Uro over 70%">🔥 Høy uro <span class="ft-count"></span></div>
+    </div>
     <div id="ilist"></div>
   </div>
   <div id="detail">
@@ -147,6 +192,17 @@ const W = COLS * TILE, H = ROWS * TILE; // 924 × 546
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 canvas.width = W; canvas.height = H;
+
+function fitCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  const availW = wrap.clientWidth;
+  const availH = wrap.clientHeight;
+  const scale  = Math.min(availW / W, availH / H);
+  canvas.style.width  = Math.floor(W * scale) + 'px';
+  canvas.style.height = Math.floor(H * scale) + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+fitCanvas();
 
 // ================================================================
 // TILE DRAW FUNCTIONS
@@ -495,6 +551,7 @@ const GS = {
   totalUnrest: 0,
   selectedId: null,
   hoverId:    null,
+  listFilter: 'all',    // 'all' | 'iso' | 'con' | 'hot'
 };
 
 // ================================================================
@@ -918,6 +975,25 @@ class Inmate {
     this.soningstidTotalt = 20 + Math.floor(Math.random()*61);  // 20–80 dager
     this.soningstidIgjen  = this.soningstidTotalt;
 
+    // Traits — stabile personlighetstrekk (påvirker spot-valg og konflikt)
+    const pickWeighted = (opts) => {
+      const r = Math.random(); let acc = 0;
+      for (const [val, w] of opts) { acc += w; if (r < acc) return val; }
+      return opts[opts.length-1][0];
+    };
+    this.temperament      = pickWeighted([['calm',0.30],['normal',0.50],['aggressive',0.20]]);
+    this.sosial           = pickWeighted([['introvert',0.30],['normal',0.50],['dominant',0.20]]);
+    this.stressTolerance  = pickWeighted([['low',0.25],['medium',0.50],['high',0.25]]);
+    this.isolationResponse = pickWeighted([['positive',0.30],['neutral',0.50],['negative',0.20]]);
+
+    // Conflict state
+    this.inConflict       = false;
+    this.conflictFlashMs  = 0;    // visuell markør, telles ned per tick
+    this.conflictCooldown = 0;    // ms til neste konflikt kan triggres
+    this.conflictCount    = 0;    // teller konflikter siden siste isolat-slutt
+    this.isolationTicks   = 0;    // gjenværende isolat-tid i ticks (0 = fri)
+    this.isolatCount      = 0;    // totalt antall ganger i isolat
+
     // Starting position
     const def = getCellDef(cellId);
     const pos = def.walkPos[0];
@@ -1084,11 +1160,12 @@ class Guard {
       this.scanTimer = 2000;
       let best = null, bestScore = -1;
       for (const inm of GS.inmates) {
-        if (inm.unrest < 78) continue;
+        if (!inm.inConflict && inm.unrest < 78) continue;   // konflikt → alltid kandidat
         const dx = inm.px - this.px, dy = inm.py - this.py;
         const d = Math.sqrt(dx*dx + dy*dy);
         if (d < TILE * 10) {
-          const score = inm.unrest - d * 0.05;
+          const base = inm.inConflict ? inm.unrest + 30 : inm.unrest; // konflikt → prioritet
+          const score = base - d * 0.05;
           if (score > bestScore) { best = inm; bestScore = score; }
         }
       }
@@ -1164,10 +1241,94 @@ function spawn() {
 }
 
 // ================================================================
+// CONFLICT MECHANIC
+// ================================================================
+const CONFLICT_DIST       = TILE * 1.5;   // rivaler trenger ikke være helt inntil
+const HEALTH_DAMAGE_MIN   = 3;
+const HEALTH_DAMAGE_MAX   = 7;
+const HEALTH_FLOOR        = 20;           // v1: ingen død — helse stopper her
+const UNREST_BOOST        = 12;
+const CONFLICT_COOLDOWN   = 12000;        // 12s før samme innsatt kan igjen
+const FLASH_DURATION      = 1800;         // 1.8s visuell markør
+
+// stressTolerance → unrest-terskel der innsatt er "på randen"
+const STRESS_THRESHOLD = { low: 35, medium: 50, high: 65 };
+// temperament → sjanse for å TRIGGE når alle andre krav er møtt
+const AGGRESSION_ROLL  = { calm: 0.10, normal: 0.45, aggressive: 0.80 };
+
+// Isolat: konsekvens av gjentatte konflikter
+const ISOLATION_THRESHOLD = 3;                                     // konflikter før isolat
+const ISOLATION_DURATION  = 1020;                                  // én full døgnsyklus i ticks
+const ISO_UNREST_DELTA    = { positive: -1.0, neutral: -0.5, negative: +0.2 };
+
+function sendToIsolation(inm) {
+  inm.isolationTicks     = ISOLATION_DURATION;
+  inm.conflictCount      = 0;
+  inm.isolatCount++;                    // total historikk
+  inm.soningstidIgjen   += 1;           // +1 dag til avsoning
+  inm.soningstidTotalt  += 1;           // hold sentPct konsistent
+  inm.waypoints          = [];
+  inm.targetZone         = 'cell';
+  inm.pendingZone        = null;
+  releaseSpot(inm.id);
+  inm._applyZoneChange('cell');
+}
+
+function triggerConflict(a, b) {
+  const dmgA = HEALTH_DAMAGE_MIN + Math.random() * (HEALTH_DAMAGE_MAX - HEALTH_DAMAGE_MIN);
+  const dmgB = HEALTH_DAMAGE_MIN + Math.random() * (HEALTH_DAMAGE_MAX - HEALTH_DAMAGE_MIN);
+  a.health = Math.max(HEALTH_FLOOR, a.health - dmgA);
+  b.health = Math.max(HEALTH_FLOOR, b.health - dmgB);
+  a.unrest = Math.min(100, a.unrest + UNREST_BOOST);
+  b.unrest = Math.min(100, b.unrest + UNREST_BOOST);
+  a.inConflict = b.inConflict = true;
+  a.conflictFlashMs = b.conflictFlashMs = FLASH_DURATION;
+  a.conflictCooldown = b.conflictCooldown = CONFLICT_COOLDOWN;
+  a.conflictCount++;
+  b.conflictCount++;
+  if (a.conflictCount >= ISOLATION_THRESHOLD) sendToIsolation(a);
+  if (b.conflictCount >= ISOLATION_THRESHOLD) sendToIsolation(b);
+}
+
+function runConflictCheck() {
+  const n = GS.inmates.length;
+  for (let i = 0; i < n; i++) {
+    const a = GS.inmates[i];
+    if (a.isolationTicks > 0) continue;
+    if (a.conflictCooldown > 0) continue;
+    if (a.unrest < STRESS_THRESHOLD[a.stressTolerance]) continue;
+    if (a.isBeingIntervened) continue;
+    if (a.zone === 'cell') continue;
+
+    for (let j = i+1; j < n; j++) {
+      const b = GS.inmates[j];
+      if (b.isolationTicks > 0) continue;
+      if (b.conflictCooldown > 0) continue;
+      if (b.groupId === a.groupId) continue;                    // rivaler = annen gjeng
+      if (b.unrest < STRESS_THRESHOLD[b.stressTolerance]) continue;
+      if (b.isBeingIntervened) continue;
+      if (b.zone === 'cell') continue;
+
+      const dx = a.px - b.px, dy = a.py - b.py;
+      const d  = Math.sqrt(dx*dx + dy*dy);
+      if (d > CONFLICT_DIST) continue;
+
+      // Trigger-sjanse = høyeste av de to sine aggresjon
+      const chance = Math.max(AGGRESSION_ROLL[a.temperament], AGGRESSION_ROLL[b.temperament]);
+      if (Math.random() > chance) continue;
+
+      triggerConflict(a, b);
+      break; // a er ferdig — maks én konflikt per sjekk per person
+    }
+  }
+}
+
+// ================================================================
 // SIMULATION TICK
 // ================================================================
 const TICK_MS = 900;
 let tickTimer = 0;
+let conflictCounter = 0;
 
 function tick() {
   // Advance phase
@@ -1191,6 +1352,7 @@ function tick() {
     }
     const newZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
     for (let i = 0; i < GS.inmates.length; i++) {
+      if (GS.inmates[i].isolationTicks > 0) continue;
       const delay = i * 350 + Math.random() * 200;
       GS.inmates[i].setTargetZone(newZone, delay);
     }
@@ -1202,20 +1364,28 @@ function tick() {
   for (const inm of GS.inmates) {
     let delta = 0;
     if (isNight) {
-      // Night: unrest drops slowly while inmates sleep in their cells
-      delta = -0.8;
+      // Proporsjonal reduksjon — uro mister en andel, nullstilles aldri helt.
+      // Koeffisient kombinerer isolationResponse (base) og temperament (modifier).
+      const NIGHT_BASE = { positive: -0.014, neutral: -0.010, negative: -0.006 };
+      const NIGHT_TEMP = { calm: 1.25, normal: 1.0, aggressive: 0.70 };
+      const factor = NIGHT_BASE[inm.isolationResponse] * NIGHT_TEMP[inm.temperament];
+      delta = factor * inm.unrest;
     } else {
       for (const other of GS.inmates) {
         if (other === inm) continue;
         const dx = other.px - inm.px, dy = other.py - inm.py;
         const d = Math.sqrt(dx*dx + dy*dy);
         if (d < TILE*3) {
+          const prox = 1 - d/(TILE*3);
           // Same category → less tension; different → more
-          const factor = other.kategori === inm.kategori ? 0.15 : 0.35;
-          delta += factor * (1 - d/(TILE*3));
+          const factor = other.kategori === inm.kategori ? 0.15 : 0.45;
+          delta += factor * prox;
           // Same gang → calming; different gang → tension
-          const gangFactor = other.groupId === inm.groupId ? -0.10 : 0.32;
-          delta += gangFactor * (1 - d/(TILE*3));
+          const gangFactor = other.groupId === inm.groupId ? -0.10 : 0.55;
+          delta += gangFactor * prox;
+          // Sosial-trait: introvert irriteres av crowd, dominant nyter selskap
+          if (inm.sosial === 'introvert') delta += 0.10 * prox;
+          else if (inm.sosial === 'dominant') delta -= 0.05 * prox;
         }
       }
       for (const g of GS.guards) {
@@ -1223,7 +1393,17 @@ function tick() {
         const d = Math.sqrt(dx*dx + dy*dy);
         if (d < TILE*5) delta -= 1.1 * (1 - d/(TILE*5));
       }
-      delta += (22 - inm.unrest) * 0.012; // gentle mean-reversion
+      // stressTolerance forsterker/demper samlet reaksjon på nærhet
+      const STRESS_MUL = { low: 1.25, medium: 1.0, high: 0.80 };
+      delta *= STRESS_MUL[inm.stressTolerance];
+      // Temperament-basert baseline: aggressive drifter naturlig mot høyere unrest
+      const BASELINE = { calm: 15, normal: 22, aggressive: 35 };
+      delta += (BASELINE[inm.temperament] - inm.unrest) * 0.012;
+    }
+    // Isolat overstyrer alt annet — egen modus med trait-avhengig utvikling
+    if (inm.isolationTicks > 0) {
+      delta = ISO_UNREST_DELTA[inm.isolationResponse];
+      inm.isolationTicks -= GS.speed;
     }
     inm.unrest = Math.max(0, Math.min(100, inm.unrest + delta));
 
@@ -1241,7 +1421,17 @@ function tick() {
 
     // dominans: very slow drift toward individual baseline (no sudden changes)
     inm.dominans = Math.max(0, Math.min(100, inm.dominans + (50 - inm.dominans) * 0.005));
+
+    // conflict cooldown + flash decrement (hver tick)
+    if (inm.conflictCooldown > 0) inm.conflictCooldown = Math.max(0, inm.conflictCooldown - TICK_MS);
+    if (inm.conflictFlashMs  > 0) {
+      inm.conflictFlashMs = Math.max(0, inm.conflictFlashMs - TICK_MS);
+      if (inm.conflictFlashMs === 0) inm.inConflict = false;
+    }
   }
+
+  // Konflikt-sjekk hver 10. tick (~9s)
+  if (++conflictCounter >= 10) { conflictCounter = 0; runConflictCheck(); }
 
   GS.totalUnrest = GS.inmates.length
     ? GS.inmates.reduce((s,i) => s+i.unrest, 0) / GS.inmates.length
@@ -1402,6 +1592,34 @@ function renderInmates() {
     ctx.fillStyle = uc;
     ctx.beginPath(); ctx.arc(inm.px + base*0.55, inm.py - base*0.62, 2.5, 0, Math.PI*2); ctx.fill();
 
+    // Status-emoji over hodet — isolat > konflikt > høy uro
+    if (inm.isolationTicks > 0) {
+      ctx.save();
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🔒', inm.px, inm.py - base*1.9);
+      ctx.restore();
+    } else if (inm.conflictFlashMs > 0) {
+      const t = inm.conflictFlashMs / 1800;                      // 1..0 fade
+      const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.02);
+      ctx.save();
+      ctx.globalAlpha = t * pulse;
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('💥', inm.px, inm.py - base*1.9);
+      ctx.restore();
+    } else if (inm.unrest > 70) {
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('😰', inm.px, inm.py - base*1.9);
+      ctx.restore();
+    }
+
     // Sleep indicator — visible only when actually lying in bed
     if (inm.sleepState === 'in_bed') {
       const floatY = Math.sin(Date.now() * 0.0015 + inm.id) * 2;
@@ -1466,6 +1684,16 @@ function renderGuards() {
     ctx.beginPath(); ctx.arc(hx, hy, hr * 1.22, Math.PI, 0); ctx.fill();
     // Cap brim — thin horizontal stripe at base of cap
     ctx.fillRect(hx - hr * 1.35, hy - 1, hr * 2.7, 2);
+
+    // Intervention emoji — synlig når vakten faktisk står og griper inn
+    if (g.target && g.interventionTimer > 0) {
+      ctx.save();
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('👮', g.px, g.py - base*1.9);
+      ctx.restore();
+    }
   }
 }
 
@@ -1503,6 +1731,177 @@ function unrestReasons(inm) {
 }
 let uiTimer = 0;
 
+// ================================================================
+// INNSATT-LISTE: in-place rendering + filter + throttlet sortering
+// ================================================================
+const listNodes = new Map();   // inmateId → {root, nameEl, cellEl, barFill, badgeEl}
+let currentOrder = [];         // id-rekkefølgen som er i DOM nå
+let lastSortTs   = 0;
+
+function matchesFilter(inm, f) {
+  switch (f) {
+    case 'iso': return inm.isolationTicks > 0;
+    case 'con': return inm.conflictCooldown > 0;
+    case 'hot': return inm.unrest >= 70;
+    default:    return true;
+  }
+}
+
+function sortForFilter(ids, f) {
+  const byId = new Map(GS.inmates.map(i => [i.id, i]));
+  const k = {
+    iso: inm => -inm.isolationTicks,
+    con: inm => -inm.conflictCooldown,
+    hot: inm => -inm.unrest,
+    all: inm => -inm.unrest,
+  }[f] || (inm => -inm.unrest);
+  return ids.slice().sort((a, b) => {
+    const ia = byId.get(a), ib = byId.get(b);
+    return k(ia) - k(ib) || a - b;
+  });
+}
+
+function computeDesiredOrder() {
+  const filtered = GS.inmates.filter(inm => matchesFilter(inm, GS.listFilter)).map(i => i.id);
+  const sorted = sortForFilter(filtered, GS.listFilter);
+  const sel = GS.selectedId;
+  if (sel != null && !filtered.includes(sel) && GS.inmates.some(i => i.id === sel)) {
+    return [sel, ...sorted];
+  }
+  return sorted;
+}
+
+function getOrCreateCard(inm) {
+  let entry = listNodes.get(inm.id);
+  if (entry) return entry;
+  const root = document.createElement('div');
+  root.className = 'ir';
+  root.dataset.id = inm.id;
+  root.innerHTML = `
+    <div class="ir-top">
+      <span class="ir-name"></span>
+      <span class="ir-cell"></span>
+    </div>
+    <div class="ub"><div class="uf"></div></div>
+    <div class="ir-badge" style="display:none"></div>`;
+  entry = {
+    root,
+    nameEl:  root.querySelector('.ir-name'),
+    cellEl:  root.querySelector('.ir-cell'),
+    barFill: root.querySelector('.uf'),
+    badgeEl: root.querySelector('.ir-badge'),
+  };
+  listNodes.set(inm.id, entry);
+  return entry;
+}
+
+function updateCardContent(inm, isPinned) {
+  const e = getOrCreateCard(inm);
+  const u2 = Math.round(inm.unrest);
+  const fc = u2>70?'#c83030':u2>40?'#b07828':'#308848';
+  const cls = 'ir'
+            + (inm.id === GS.selectedId ? ' sel' : '')
+            + (isPinned ? ' pinned' : '');
+  if (e.root.className !== cls) e.root.className = cls;
+  if (e.nameEl.textContent !== inm.name) e.nameEl.textContent = inm.name;
+  if (e.cellEl.textContent !== inm.cellId) e.cellEl.textContent = inm.cellId;
+  const w = u2 + '%';
+  if (e.barFill.style.width !== w) e.barFill.style.width = w;
+  if (e.barFill.style.background !== fc) e.barFill.style.background = fc;
+
+  let bTxt = '', bCol = '';
+  if (inm.isolationTicks > 0) {
+    bTxt = `🔒 ISOLAT (${Math.ceil(inm.isolationTicks/1020*24)}t igjen)`;
+    bCol = '#c83030';
+  } else if (inm.conflictCooldown > 0) {
+    bTxt = '💥 KONFLIKT';
+    bCol = '#e07040';
+  }
+  if (bTxt) {
+    if (e.badgeEl.textContent !== bTxt) e.badgeEl.textContent = bTxt;
+    if (e.badgeEl.style.color !== bCol) e.badgeEl.style.color = bCol;
+    if (e.badgeEl.style.display === 'none') e.badgeEl.style.display = '';
+  } else if (e.badgeEl.style.display !== 'none') {
+    e.badgeEl.style.display = 'none';
+  }
+}
+
+function applyOrder(list, desired) {
+  // Fjern noder som ikke er ønsket lenger
+  for (const [id, entry] of listNodes) {
+    if (!desired.includes(id) || !GS.inmates.some(i => i.id === id)) {
+      entry.root.remove();
+      listNodes.delete(id);
+    }
+  }
+  // appendChild på eksisterende node flytter den — ingen rebuild
+  const byId = new Map(GS.inmates.map(i => [i.id, i]));
+  for (const id of desired) {
+    const inm = byId.get(id);
+    if (!inm) continue;
+    const entry = getOrCreateCard(inm);
+    list.appendChild(entry.root);
+  }
+  currentOrder = desired.slice();
+}
+
+function updateTabCounts() {
+  const counts = { all: GS.inmates.length, iso: 0, con: 0, hot: 0 };
+  for (const inm of GS.inmates) {
+    if (inm.isolationTicks > 0) counts.iso++;
+    if (inm.conflictCooldown > 0) counts.con++;
+    if (inm.unrest >= 70) counts.hot++;
+  }
+  document.querySelectorAll('#filter-tabs .ft').forEach(t => {
+    const span = t.querySelector('.ft-count');
+    const txt = `(${counts[t.dataset.f]})`;
+    if (span.textContent !== txt) span.textContent = txt;
+  });
+}
+
+function renderInmateList() {
+  const list = document.getElementById('ilist');
+  const desired = computeDesiredOrder();
+
+  if (desired.length === 0) {
+    // Tøm DOM og vis placeholder
+    for (const [, entry] of listNodes) entry.root.remove();
+    listNodes.clear();
+    currentOrder = [];
+    list.innerHTML = '<div class="ir-empty">Ingen i denne kategorien</div>';
+    return;
+  }
+
+  // Hvis vi nettopp viste placeholder, tøm den
+  const placeholder = list.querySelector('.ir-empty');
+  if (placeholder) placeholder.remove();
+
+  // Medlemskaps-endring eller selected-id endring → reorder umiddelbart.
+  // Rangerings-endring innen samme sett → throttles til 2s.
+  const sameSet = desired.length === currentOrder.length
+    && desired.every(id => currentOrder.includes(id));
+  const now = performance.now();
+  const shouldReorder = !sameSet || (
+    desired.some((id, i) => currentOrder[i] !== id) && now - lastSortTs > 2000
+  );
+
+  if (shouldReorder) {
+    applyOrder(list, desired);
+    lastSortTs = now;
+  }
+
+  // Oppdater innhold på alle synlige kort (både nye og gamle)
+  const byId = new Map(GS.inmates.map(i => [i.id, i]));
+  const filteredSet = new Set(
+    GS.inmates.filter(inm => matchesFilter(inm, GS.listFilter)).map(i => i.id)
+  );
+  for (const id of currentOrder) {
+    const inm = byId.get(id);
+    if (!inm) continue;
+    updateCardContent(inm, !filteredSet.has(id));
+  }
+}
+
 function updateUI() {
   const phase = PHASES[GS.phaseIndex];
   document.getElementById('phase-display').textContent = phase;
@@ -1516,45 +1915,29 @@ function updateUI() {
   document.getElementById('s-count').textContent  = GS.inmates.length;
   document.getElementById('s-guards').textContent = GS.guards.length;
 
-  // Inmate list
-  const list = document.getElementById('ilist');
-  list.innerHTML = '';
-  for (const inm of GS.inmates) {
-    const div = document.createElement('div');
-    div.className = 'ir' + (inm.id===GS.selectedId?' sel':'');
-    const u2 = Math.round(inm.unrest);
-    const fc = u2>70?'#c83030':u2>40?'#b07828':'#308848';
-    div.innerHTML = `
-      <div class="ir-name">${inm.name} <span style="color:#445;font-size:0.62rem">[${inm.cellId}]</span></div>
-      <div class="ub"><div class="uf" style="width:${u2}%;background:${fc}"></div></div>`;
-    div.addEventListener('click', () => {
-      GS.selectedId = (inm.id===GS.selectedId) ? null : inm.id;
-    });
-    list.appendChild(div);
-  }
+  // Inmate list — in-place render, filter og stabil sortering
+  renderInmateList();
+  updateTabCounts();
 
   // Detail panel
   const sel = GS.inmates.find(i => i.id===GS.selectedId);
   const dp  = document.getElementById('detail');
   if (sel) {
     const u3 = Math.round(sel.unrest);
-    const sentPct = Math.round((sel.soningstidIgjen / sel.soningstidTotalt) * 100);
     dp.innerHTML = `
-      <h4>${sel.name}</h4>
-      <div class="dr"><span class="dl">Celle</span><span class="dv">${sel.cellId}</span></div>
-      <div class="dr"><span class="dl">Dom</span><span class="dv">${sel.kategori}</span></div>
-      <div class="dr"><span class="dl">Sone</span><span class="dv">${ZONE_LBL[sel.zone]||sel.zone}</span></div>
+      <h4>${sel.name} <span style="color:#556;font-size:0.65rem;font-weight:normal">${sel.cellId}</span><span id="detail-close" style="float:right;cursor:pointer;color:#667;font-size:0.9rem;padding:0 4px" title="Lukk (Esc)">×</span></h4>
       <div class="dr"><span class="dl">Uro</span><span class="dv">${u3}%</span></div>
       <div class="dr"><span class="dl">Helse</span><span class="dv">${Math.round(sel.health)}%</span></div>
-      <div class="dr"><span class="dl">Energi</span><span class="dv">${Math.round(sel.energi)}%</span></div>
-      <div class="dr"><span class="dl">Hygiene</span><span class="dv">${Math.round(sel.hygiene)}%</span></div>
-      <div class="dr"><span class="dl">Disiplin</span><span class="dv">${Math.round(sel.disiplin)}%</span></div>
-      <div class="dr"><span class="dl">Dominans</span><span class="dv">${Math.round(sel.dominans)}%</span></div>
       <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>
+      <div class="dr"><span class="dl">Isolat</span><span class="dv">${sel.isolatCount} ganger</span></div>
+      <div class="dr" style="margin-top:6px"><span class="dl">Personlighet</span></div>
+      <div class="dr"><span class="dl">Temperament</span><span class="dv">${sel.temperament}</span></div>
+      <div class="dr"><span class="dl">Sosial</span><span class="dv">${sel.sosial}</span></div>
+      <div class="dr"><span class="dl">Stress</span><span class="dv">${sel.stressTolerance}</span></div>
       ${(() => {
         const rs = unrestReasons(sel);
         if (!rs.length) return '';
-        return `<div class="dr" style="margin-top:5px"><span class="dl">Uro-årsak</span></div>` +
+        return `<div class="dr" style="margin-top:6px"><span class="dl">Uro-årsak</span></div>` +
           rs.map(r => `<div class="dr"><span class="dv" style="color:#b06838">&#x2191; ${r}</span></div>`).join('');
       })()}`;
   } else {
@@ -1589,7 +1972,10 @@ document.querySelectorAll('.pb').forEach(btn => {
 // Canvas — click to select inmate, mousemove to hover
 canvas.addEventListener('click', e => {
   const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const sx = canvas.width  / rect.width;
+  const sy = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * sx;
+  const my = (e.clientY - rect.top)  * sy;
   let closest = null, closestD = TILE;
   for (const inm of GS.inmates) {
     const d = Math.hypot(inm.px - mx, inm.py - my);
@@ -1599,7 +1985,10 @@ canvas.addEventListener('click', e => {
 });
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const sx = canvas.width  / rect.width;
+  const sy = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * sx;
+  const my = (e.clientY - rect.top)  * sy;
   let closest = null, closestD = TILE * 1.2;
   for (const inm of GS.inmates) {
     const d = Math.hypot(inm.px - mx, inm.py - my);
@@ -1610,14 +1999,39 @@ canvas.addEventListener('mousemove', e => {
 });
 canvas.addEventListener('mouseleave', () => { GS.hoverId = null; canvas.style.cursor = 'default'; });
 
-// Click outside inmate list / detail panel → deselect
-document.addEventListener('click', e => {
-  if (!e.target.closest('#inmate-section, #detail, #c')) GS.selectedId = null;
+// Filter-faner — permanent delegation-lytter
+document.getElementById('filter-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.ft');
+  if (!tab) return;
+  const f = tab.dataset.f;
+  if (f === GS.listFilter) return;
+  GS.listFilter = f;
+  document.querySelectorAll('#filter-tabs .ft').forEach(t => {
+    t.classList.toggle('on', t.dataset.f === f);
+  });
+  lastSortTs = 0;               // tving reorder umiddelbart
+  updateUI();
+});
+
+// Delegert klikk på innsatt-liste — én permanent lytter som overlever
+// rerender av listen (tidligere bug: per-kort lytter ble ødelagt mellom
+// mousedown og mouseup av updateUI-løkken hver 180 ms).
+document.getElementById('ilist').addEventListener('click', e => {
+  const card = e.target.closest('.ir');
+  if (!card) return;
+  const id = Number(card.dataset.id);
+  GS.selectedId = (GS.selectedId === id) ? null : id;
+  updateUI();
+});
+
+// Lukk-knapp i detaljpanel
+document.getElementById('detail').addEventListener('click', e => {
+  if (e.target.id === 'detail-close') { GS.selectedId = null; updateUI(); }
 });
 
 // ESC → deselect
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') GS.selectedId = null;
+  if (e.key === 'Escape') { GS.selectedId = null; updateUI(); }
 });
 
 // ================================================================
