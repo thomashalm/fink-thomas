@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<title>Fengselsimulator</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#0e1012;
+  display:flex;
+  align-items:flex-start;
+  font-family:'Courier New',monospace;
+  color:#b0b0b0;
+  height:100vh;
+  overflow:hidden;
+}
+canvas { display:block; flex-shrink:0; }
+#sidebar {
+  width:260px;
+  height:546px;
+  background:#161a1e;
+  border-left:2px solid #222830;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.panel { padding:11px 14px; border-bottom:1px solid #1e2228; }
+#hdr h1 { font-size:0.62rem; letter-spacing:3px; color:#334; text-transform:uppercase; margin-bottom:7px; }
+#phase-display { font-size:1.3rem; color:#c8b460; font-weight:bold; }
+#day-display   { font-size:0.75rem; color:#445; margin-top:2px; }
+.stat-row { display:flex; justify-content:space-between; padding:2px 0; font-size:0.78rem; }
+.lbl { color:#445; }
+.val { color:#999; }
+.val.hi { color:#c84040; }
+.val.md { color:#b87830; }
+.val.lo { color:#388050; }
+#inmate-section { flex:1; overflow-y:auto; }
+#inmate-section h3 { font-size:0.6rem; letter-spacing:2px; color:#334; text-transform:uppercase; padding:6px 14px 5px; border-bottom:1px solid #1a1e24; }
+.ir { padding:3px 14px; cursor:pointer; border-left:3px solid transparent; }
+.ir:hover { background:#1c2026; }
+.ir.sel  { background:#1e2632; border-left-color:#c8b460; }
+.ir-name { font-size:0.72rem; color:#aaa; }
+.ub { height:2px; background:#1a1e24; margin-top:2px; border-radius:1px; overflow:hidden; }
+.uf { height:100%; border-radius:1px; transition:width 0.5s; }
+#detail { border-top:1px solid #1e2228; padding:11px 14px; background:#141820; min-height:108px; }
+#detail h4 { font-size:0.76rem; color:#c8b460; margin-bottom:6px; }
+.dr { display:flex; justify-content:space-between; font-size:0.73rem; margin:2px 0; }
+.dl { color:#445; }
+.dv { color:#999; }
+#ctrl { border-top:1px solid #1e2228; padding:6px 14px 5px; display:flex; flex-direction:column; gap:5px; }
+.ctrl-row { display:flex; align-items:center; gap:5px; }
+#ctrl span { font-size:0.66rem; color:#445; }
+.sb {
+  background:#1a1e24; border:1px solid #30363e; color:#777;
+  padding:2px 7px; font-family:monospace; font-size:0.7rem;
+  cursor:pointer; border-radius:2px;
+}
+.sb:hover { background:#22282e; }
+.sb.on { background:#202838; border-color:#c8b460; color:#c8b460; }
+.pb {
+  background:#1a1e24; border:1px solid #30363e; color:#667;
+  padding:2px 6px; font-family:monospace; font-size:0.63rem;
+  cursor:pointer; border-radius:2px; flex:1;
+}
+.pb:hover { background:#22282e; color:#888; }
+.pb.on { background:#1e2030; border-color:#8870a0; color:#b090d0; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="sidebar">
+  <div class="panel" id="hdr">
+    <h1>Fengselsimulator v1</h1>
+    <div id="phase-display">Morgen</div>
+    <div id="day-display">Dag 1</div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
+      <div class="ctrl-row">
+        <button class="pb" data-p="Morgen">Morgen</button>
+        <button class="pb" data-p="Formiddag">Formiddag</button>
+        <button class="pb" data-p="Ettermiddag">Ettermiddag</button>
+      </div>
+      <div class="ctrl-row">
+        <button class="pb" data-p="Kveld">Kveld</button>
+        <button class="pb" data-p="Natt">Natt</button>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="stat-row"><span class="lbl">Total uro</span><span class="val" id="s-unrest">0%</span></div>
+    <div class="stat-row"><span class="lbl">Innsatte</span><span class="val" id="s-count">0</span></div>
+    <div class="stat-row"><span class="lbl">Vakter</span><span class="val" id="s-guards">0</span></div>
+  </div>
+  <div id="inmate-section">
+    <h3>Innsatte</h3>
+    <div id="ilist"></div>
+  </div>
+  <div id="detail">
+    <span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>
+  </div>
+  <div id="ctrl">
+    <div class="ctrl-row">
+      <span>Hastighet:</span>
+      <button class="sb on" data-s="1">1×</button>
+      <button class="sb" data-s="2">2×</button>
+      <button class="sb" data-s="5">5×</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// CONFIG
+// ================================================================
+const TILE = 21, COLS = 44, ROWS = 26;
+const W = COLS * TILE, H = ROWS * TILE; // 924 × 546
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+canvas.width = W; canvas.height = H;
+
+// ================================================================
+// TILE DRAW FUNCTIONS
+// ================================================================
+function drawWall(ctx, px, py, T) {
+  ctx.fillStyle = '#363636';
+  ctx.fillRect(px, py, T, T);
+  ctx.fillStyle = '#404040';
+  ctx.fillRect(px+2, py+2, T-4, T-4);
+  const even = Math.floor(py/T) % 2 === 0;
+  ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px, py+T/2); ctx.lineTo(px+T, py+T/2);
+  const bx = px + (even ? T/2 : 0);
+  ctx.moveTo(bx, py);       ctx.lineTo(bx, py+T/2);
+  ctx.moveTo(bx+T/2, py+T/2); ctx.lineTo(bx+T/2, py+T);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(px+T-2, py, 2, T);
+  ctx.fillRect(px, py+T-2, T, 2);
+}
+
+function drawFloor(ctx, px, py, T) {
+  const v = (px/T*7 + py/T*13) % 3;
+  ctx.fillStyle = v<1 ? '#505050' : v<2 ? '#4c4c4c' : '#484848';
+  ctx.fillRect(px, py, T, T);
+  ctx.strokeStyle = '#3e3e3e'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
+}
+
+function drawCellFloor(ctx, px, py, T) {
+  const v = (px/T*11 + py/T*7) % 3;
+  ctx.fillStyle = v<1 ? '#444e5c' : v<2 ? '#404858' : '#3c4452';
+  ctx.fillRect(px, py, T, T);
+  ctx.strokeStyle = '#343c4c'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
+}
+
+function drawDoor(ctx, px, py, T) {
+  ctx.fillStyle = '#362416'; ctx.fillRect(px, py, T, T);
+  ctx.fillStyle = '#282828';
+  ctx.fillRect(px, py, T, 3); ctx.fillRect(px, py+T-3, T, 3);
+  ctx.fillStyle = '#4c3820'; ctx.fillRect(px+3, py+3, T-6, T-6);
+  ctx.fillStyle = '#706050'; ctx.fillRect(px+4, py+T*0.42|0, T-8, 3);
+  ctx.fillStyle = '#8a8a8a'; ctx.fillRect(px+T-8, py+T/2-3|0, 3, 6);
+}
+
+function drawBed(ctx, px, py, T) {
+  drawCellFloor(ctx, px, py, T);
+  const m = 2;
+  // Bed frame (dark wood)
+  ctx.fillStyle = '#3a2410'; ctx.fillRect(px+m, py+m, T-m*2, T-m*2);
+  ctx.strokeStyle = '#5a3820'; ctx.lineWidth = 1;
+  ctx.strokeRect(px+m, py+m, T-m*2, T-m*2);
+  // Mattress
+  ctx.fillStyle = '#7a6050'; ctx.fillRect(px+m+2, py+m+2, T-m*2-4, T-m*2-4);
+  // Blanket (lower 2/3)
+  ctx.fillStyle = '#5c7080'; ctx.fillRect(px+m+2, py+m+6, T-m*2-4, T-m*2-8);
+  // Blanket fold line
+  ctx.strokeStyle = '#4a5e6c'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(px+m+2, py+m+6); ctx.lineTo(px+T-m-2, py+m+6); ctx.stroke();
+  // Pillow — bright cream, clearly visible
+  ctx.fillStyle = '#e0d8b8'; ctx.fillRect(px+m+3, py+m+2, T-m*2-8, 5);
+  ctx.strokeStyle = '#c8c0a0'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(px+m+3, py+m+2, T-m*2-8, 5);
+}
+
+function drawToilet(ctx, px, py, T) {
+  drawCellFloor(ctx, px, py, T);
+  ctx.fillStyle = '#c0c0c0';
+  ctx.beginPath(); ctx.ellipse(px+T/2, py+T*0.62, T*0.27, T*0.24, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#a0a0a0'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle = '#cccccc';
+  ctx.fillRect(px+T*0.27|0, py+T*0.17|0, T*0.46|0, T*0.26|0);
+  ctx.strokeStyle = '#b0b0b0'; ctx.strokeRect(px+T*0.27|0, py+T*0.17|0, T*0.46|0, T*0.26|0);
+}
+
+function drawFence(ctx, px, py, T) {
+  ctx.fillStyle = '#202020'; ctx.fillRect(px, py, T, T);
+  ctx.strokeStyle = '#404040'; ctx.lineWidth = 1.5;
+  for (let i=0; i<=2; i++) {
+    const fx = px + T*(i/2);
+    ctx.beginPath(); ctx.moveTo(fx, py); ctx.lineTo(fx, py+T); ctx.stroke();
+  }
+  ctx.strokeStyle = '#303030'; ctx.lineWidth = 0.8;
+  for (let j=1; j<=4; j++) {
+    const fy = py + T*(j/5);
+    ctx.beginPath(); ctx.moveTo(px, fy); ctx.lineTo(px+T, fy); ctx.stroke();
+  }
+}
+
+function drawYard(ctx, px, py, T) {
+  const v = (px/T*5 + py/T*11) % 4;
+  ctx.fillStyle = v<1?'#4e5638':v<2?'#48503400'.slice(0,9)+'484':v<3?'#4c5440':'#465038';
+  ctx.fillStyle = v<1?'#4e5638':v<2?'#485034':v<3?'#4c5440':'#465038';
+  ctx.fillRect(px, py, T, T);
+  if (v>3.2) { ctx.fillStyle='rgba(80,60,20,0.1)'; ctx.fillRect(px+3,py+3,T-6,T-6); }
+}
+
+function drawTable(ctx, px, py, T) {
+  drawFloor(ctx, px, py, T);
+  const m = 3;
+  ctx.fillStyle = '#543818'; ctx.fillRect(px+m, py+m+3, T-m*2, T-m*2-6);
+  ctx.fillStyle = '#422c10';
+  ctx.fillRect(px+m, py+m, T-m*2, 3);
+  ctx.fillRect(px+m, py+T-m-3, T-m*2, 3);
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.fillRect(px+m+2, py+m+5, T-m*2-4, 2);
+}
+
+function drawGymFloor(ctx, px, py, T) {
+  const v = (px/T*5 + py/T*7) % 3;
+  ctx.fillStyle = v<1 ? '#3a2828' : v<2 ? '#382626' : '#362424';
+  ctx.fillRect(px, py, T, T);
+  ctx.strokeStyle = '#2a1a1a'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
+}
+
+function drawShowerFloor(ctx, px, py, T) {
+  const v = (px/T*7 + py/T*5) % 3;
+  ctx.fillStyle = v<1 ? '#263244' : v<2 ? '#243040' : '#283448';
+  ctx.fillRect(px, py, T, T);
+  ctx.strokeStyle = '#1a2436'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
+  ctx.fillStyle = 'rgba(120,170,240,0.10)';
+  ctx.fillRect(px+2, py+2, T-4, T-4);
+}
+
+function drawShowerHead(ctx, px, py, T) {
+  drawShowerFloor(ctx, px, py, T);
+  // Stall border
+  ctx.strokeStyle = 'rgba(140,190,255,0.22)'; ctx.lineWidth = 1;
+  ctx.strokeRect(px+2, py+2, T-4, T-4);
+  // Nozzle pipe (vertical line from top)
+  ctx.strokeStyle = 'rgba(160,200,255,0.35)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(px+T/2, py+3); ctx.lineTo(px+T/2, py+T*0.45|0); ctx.stroke();
+  // Nozzle head (small horizontal bar)
+  ctx.beginPath(); ctx.moveTo(px+T/2-3, py+T*0.45|0); ctx.lineTo(px+T/2+3, py+T*0.45|0); ctx.stroke();
+  // Water droplets (3 tiny dots below nozzle)
+  ctx.fillStyle = 'rgba(140,200,255,0.40)';
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath(); ctx.arc(px+T/2 + i*3, py+T*0.65|0, 1, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function drawEquipment(ctx, px, py, T) {
+  drawGymFloor(ctx, px, py, T);
+  const m = 4;
+  ctx.fillStyle = '#606060';
+  ctx.fillRect(px+m, py+T/2-2|0, T-m*2, 3);
+  ctx.fillStyle = '#484848';
+  ctx.fillRect(px+m, py+m+2, 4, T-m*2-4);
+  ctx.fillRect(px+T-m-4, py+m+2, 4, T-m*2-4);
+  ctx.strokeStyle = '#808080'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(px+m, py+m+2, 4, T-m*2-4);
+  ctx.strokeRect(px+T-m-4, py+m+2, 4, T-m*2-4);
+}
+
+const DRAWERS = {
+  wall: drawWall, floor: drawFloor, cell_floor: drawCellFloor,
+  door: drawDoor, bed: drawBed, toilet: drawToilet,
+  fence: drawFence, yard: drawYard, table: drawTable,
+  gym_floor: drawGymFloor, shower_floor: drawShowerFloor, equipment: drawEquipment,
+  shower_head: drawShowerHead,
+};
+
+// ================================================================
+// MAP BUILDER
+// ================================================================
+function mk(type, walkable, zone) { return { type, walkable, zone }; }
+
+function buildMap() {
+  const M = [];
+  for (let y=0; y<ROWS; y++) {
+    M[y] = [];
+    for (let x=0; x<COLS; x++) M[y][x] = mk('wall', false, 'wall');
+  }
+
+  // North fence row 1
+  for (let x=1; x<=42; x++) M[1][x] = mk('fence', false, 'fence');
+
+  // Yard rows 2-3 (fenced sides at col 1 and col 42)
+  for (let y=2; y<=3; y++)
+    for (let x=1; x<=42; x++)
+      M[y][x] = (x===1||x===42) ? mk('fence',false,'fence') : mk('yard',true,'yard');
+
+  // Inner fence row 4, gate at cols 20-22 (onto vertical corridor)
+  for (let x=1; x<=42; x++)
+    M[4][x] = (x>=20&&x<=22) ? mk('floor',true,'corridor') : mk('fence',false,'fence');
+
+  // Cafeteria rows 5-7 (cols 2-41); col 21 will be overridden by vertical corridor
+  for (let y=5; y<=7; y++)
+    for (let x=2; x<=41; x++) M[y][x] = mk('floor', true, 'cafeteria');
+
+  // Cafeteria: two long tables at row 6
+  for (let x=4;  x<=18; x++) M[6][x] = mk('table', false, 'cafeteria'); // left long table
+  for (let x=23; x<=37; x++) M[6][x] = mk('table', false, 'cafeteria'); // right long table
+
+  // Row 8: wall (separates cafeteria from below) — only col 21 will be opened by vert corridor
+
+  // Gym: cols 10-20, rows 17-21 (entered via left inner corridor col 9)
+  for (let y=17; y<=21; y++)
+    for (let x=10; x<=20; x++) M[y][x] = mk('gym_floor', true, 'gym');
+
+  // Equipment in gym (non-walkable)
+  for (const [ex,ey] of [
+    [11,17],[15,17],[19,17],
+    [11,19],[16,19],[19,19],
+    [11,21],[15,21],[19,21],
+  ]) M[ey][ex] = mk('equipment', false, 'gym');
+
+  // Shower: cols 24-34, rows 17-21 (entered via right inner corridor col 35)
+  for (let y=17; y<=21; y++)
+    for (let x=24; x<=34; x++) M[y][x] = mk('shower_floor', true, 'shower');
+  // Shower heads: 3 fixed stall positions (walkable)
+  for (const [sx,sy] of [[26,18],[29,18],[32,18]]) M[sy][sx] = mk('shower_head', true, 'shower');
+
+  // ── PANOPTIKON CORRIDORS ────────────────────────────────────────
+  // Vertical spine: col 21, rows 4-23 (north-south axis)
+  for (let y=4; y<=23; y++) M[y][21] = mk('floor', true, 'corridor');
+
+  // Horizontal spine: row 12, cols 5-38 (east-west axis)
+  for (let x=5; x<=38; x++) M[12][x] = mk('floor', true, 'corridor');
+
+  // Center hub: cols 20-22, rows 11-13 (widened 3×3 intersection)
+  for (let y=11; y<=13; y++)
+    for (let x=20; x<=22; x++) M[y][x] = mk('floor', true, 'corridor');
+
+  // Left inner corridor: col 9, rows 9-23
+  for (let y=9; y<=23; y++) M[y][9] = mk('floor', true, 'corridor');
+
+  // Right inner corridor: col 35, rows 9-23
+  for (let y=9; y<=23; y++) M[y][35] = mk('floor', true, 'corridor');
+
+  // Bottom cross-corridor: row 23, cols 5-38 (alternative east-west route)
+  for (let x=5; x<=38; x++) M[23][x] = mk('floor', true, 'corridor');
+
+  // Side entrances: openings in row 8 wall for cafeteria, row 4 fence for yard
+  M[8][9]  = mk('floor', true, 'corridor');  // left cafeteria entry (via col 9)
+  M[8][35] = mk('floor', true, 'corridor');  // right cafeteria entry (via col 35)
+  M[4][9]  = mk('floor', true, 'corridor');  // left yard gate (via col 9)
+  M[4][35] = mk('floor', true, 'corridor');  // right yard gate (via col 35)
+
+  // ── CELL BLOCKS (4 per side, 8 inmates) ────────────────────────
+  const BLOCKS = [
+    { wr:9,  dr:10, lr:11 },   // above horizontal spine
+    { wr:13, dr:14, lr:15 },   // below horizontal spine
+    { wr:17, dr:18, lr:19 },   // alongside gym/shower (upper)
+    { wr:20, dr:21, lr:22 },   // alongside gym/shower (lower)
+  ];
+  for (const { wr, dr, lr } of BLOCKS) {
+    // Left cells: cols 1-7, door col 8, inner corridor col 9
+    for (let x=1; x<=7; x++) M[wr][x] = mk('wall', false, 'wall');
+    for (let x=1; x<=7; x++) M[dr][x] = mk('cell_floor', true, 'cell');
+    M[dr][8] = mk('door', true, 'cell');
+    for (let x=1; x<=7; x++) M[lr][x] = mk('cell_floor', true, 'cell');
+    M[lr][8] = mk('wall', false, 'wall');
+    // Furniture left
+    M[dr][2] = mk('bed',    false, 'cell');
+    M[dr][5] = mk('bed',    false, 'cell');
+    M[lr][3] = mk('toilet', false, 'cell');
+
+    // Right cells: cols 37-42, door col 36, inner corridor col 35
+    for (let x=37; x<=42; x++) M[wr][x] = mk('wall', false, 'wall');
+    for (let x=37; x<=42; x++) M[dr][x] = mk('cell_floor', true, 'cell');
+    M[dr][36] = mk('door', true, 'cell');
+    for (let x=37; x<=42; x++) M[lr][x] = mk('cell_floor', true, 'cell');
+    M[lr][36] = mk('wall', false, 'wall');
+    // Furniture right
+    M[dr][38] = mk('bed',    false, 'cell');
+    M[dr][41] = mk('bed',    false, 'cell');
+    M[lr][40] = mk('toilet', false, 'cell');
+  }
+
+  return M;
+}
+
+// ================================================================
+// CELL DEFINITIONS
+// ================================================================
+const CELL_DEFS = [
+  // Left cells: cols 1-7, door col 8, inner col 9
+  // dr row: beds at 2,5 → walkable: 1,3,4,6,7; lr row: toilet at 3 → walkable: 1,2,4,5,6,7
+  { id:'L1', side:'L', doorRow:10, doorCol:8, innerCol:9,
+    beds:[{x:2,y:10},{x:5,y:10}],
+    walkPos:[{x:1,y:10},{x:3,y:10},{x:4,y:10},{x:6,y:10},{x:7,y:10},
+             {x:1,y:11},{x:2,y:11},{x:4,y:11},{x:6,y:11}] },
+  { id:'L2', side:'L', doorRow:14, doorCol:8, innerCol:9,
+    beds:[{x:2,y:14},{x:5,y:14}],
+    walkPos:[{x:1,y:14},{x:3,y:14},{x:4,y:14},{x:6,y:14},{x:7,y:14},
+             {x:1,y:15},{x:2,y:15},{x:4,y:15},{x:6,y:15}] },
+  { id:'L3', side:'L', doorRow:18, doorCol:8, innerCol:9,
+    beds:[{x:2,y:18},{x:5,y:18}],
+    walkPos:[{x:1,y:18},{x:3,y:18},{x:4,y:18},{x:6,y:18},{x:7,y:18},
+             {x:1,y:19},{x:2,y:19},{x:4,y:19},{x:6,y:19}] },
+  { id:'L4', side:'L', doorRow:21, doorCol:8, innerCol:9,
+    beds:[{x:2,y:21},{x:5,y:21}],
+    walkPos:[{x:1,y:21},{x:3,y:21},{x:4,y:21},{x:6,y:21},{x:7,y:21},
+             {x:1,y:22},{x:2,y:22},{x:4,y:22},{x:6,y:22}] },
+  // Right cells: cols 37-42, door col 36, inner col 35
+  // dr row: beds at 38,41 → walkable: 37,39,40,42; lr row: toilet at 40 → walkable: 37,38,39,41,42
+  { id:'R1', side:'R', doorRow:10, doorCol:36, innerCol:35,
+    beds:[{x:38,y:10},{x:41,y:10}],
+    walkPos:[{x:37,y:10},{x:39,y:10},{x:40,y:10},{x:42,y:10},
+             {x:37,y:11},{x:38,y:11},{x:39,y:11},{x:41,y:11},{x:42,y:11}] },
+  { id:'R2', side:'R', doorRow:14, doorCol:36, innerCol:35,
+    beds:[{x:38,y:14},{x:41,y:14}],
+    walkPos:[{x:37,y:14},{x:39,y:14},{x:40,y:14},{x:42,y:14},
+             {x:37,y:15},{x:38,y:15},{x:39,y:15},{x:41,y:15},{x:42,y:15}] },
+  { id:'R3', side:'R', doorRow:18, doorCol:36, innerCol:35,
+    beds:[{x:38,y:18},{x:41,y:18}],
+    walkPos:[{x:37,y:18},{x:39,y:18},{x:40,y:18},{x:42,y:18},
+             {x:37,y:19},{x:38,y:19},{x:39,y:19},{x:41,y:19},{x:42,y:19}] },
+  { id:'R4', side:'R', doorRow:21, doorCol:36, innerCol:35,
+    beds:[{x:38,y:21},{x:41,y:21}],
+    walkPos:[{x:37,y:21},{x:39,y:21},{x:40,y:21},{x:42,y:21},
+             {x:37,y:22},{x:38,y:22},{x:39,y:22},{x:41,y:22},{x:42,y:22}] },
+];
+
+function getCellDef(id) { return CELL_DEFS.find(c => c.id === id); }
+
+// ================================================================
+// PHASES + SCHEDULE
+// ================================================================
+const PHASES = ['Morgen','Formiddag','Ettermiddag','Kveld','Natt'];
+const PHASE_ZONE = {
+  'Morgen':      'cafeteria',   // frokost
+  'Formiddag':   'gang',        // sosial gjengsamling
+  'Ettermiddag': 'cafeteria',   // lunsj
+  'Kveld':       'shower',      // dusj
+  'Natt':        'cell',        // sove
+};
+const PHASE_TICKS = { 'Morgen':340, 'Formiddag':120, 'Ettermiddag':340, 'Kveld':80, 'Natt':140 };
+
+// ================================================================
+// GAME STATE  (serialisable struktur for fremtidig save/load)
+// ================================================================
+const GS = {
+  day:   1,
+  phaseIndex: 0,
+  phaseTick:  0,
+  speed: 1,
+  inmates: [],
+  guards:  [],
+  map:     null,
+  totalUnrest: 0,
+  selectedId: null,
+};
+
+// ================================================================
+// HELPERS
+// ================================================================
+function tp(tx, ty) { return { px: tx*TILE + TILE/2, py: ty*TILE + TILE/2 }; }
+function rInt(a, b) { return a + Math.floor(Math.random() * (b-a+1)); }
+
+// ================================================================
+// ROUTING CONSTANTS
+// ================================================================
+const HORIZ_R = 12;   // horizontal panoptikon spine (east-west axis)
+const VERT_X  = 21;   // vertical panoptikon spine (north-south axis)
+const CROSS_R = 23;   // bottom cross-corridor (alternative east-west route)
+const L_INNER = 9;    // left inner corridor col (cell access + gym entry)
+const R_INNER = 35;   // right inner corridor col (cell access + shower entry)
+
+// ================================================================
+// SPOTS + OCCUPANCY
+// ================================================================
+const SPOTS = (() => {
+  const spots = {};
+
+  // Cafeteria: counter spots (food service area, row 7) + seat spots (rows 5 and 7 along tables)
+  // Counter spots — where inmates briefly stop to collect food
+  [
+    [10,7],[14,7],[17,7],    // left side counters
+    [24,7],[27,7],[31,7],    // right side counters
+  ].forEach(([c,r],i) =>
+    spots[`caf_counter_${i}`] = { id:`caf_counter_${i}`, zone:'cafeteria', subzone:'counter',
+      px:(c*TILE+TILE/2), py:(r*TILE+TILE/2) });
+
+  // Seat spots — north (row 5) and south (row 7, non-counter) sides of each long table
+  [
+    [4,5],[6,5],[8,5],[10,5],[12,5],[14,5],[16,5],[18,5],   // left north
+    [4,7],[6,7],[8,7],[20,7],                                // left south
+    [23,5],[25,5],[27,5],[29,5],[31,5],[33,5],[35,5],[37,5], // right north
+    [22,7],[34,7],[36,7],[38,7],                             // right south
+  ].forEach(([c,r],i) =>
+    spots[`caf_seat_${i}`] = { id:`caf_seat_${i}`, zone:'cafeteria', subzone:'seat',
+      px:(c*TILE+TILE/2), py:(r*TILE+TILE/2) });
+
+  // Yard: rows 2-3, spread across width
+  [[4,2],[9,2],[14,2],[19,2],[24,2],[29,2],[35,2],[40,2],
+   [5,3],[11,3],[17,3],[22,3],[27,3],[33,3],[38,3]].forEach(([c,r],i) =>
+    spots[`yard_${i}`] = { id:`yard_${i}`, zone:'yard', px:(c*TILE+TILE/2), py:(r*TILE+TILE/2) });
+
+  // Gym: spots near equipment (clusters of 2 per machine) + spread fill spots
+  // Equipment at rows 17,19,21 cols 11,15/16,19 — place adjacent walkable spots
+  // Near-equipment: 1 spot beside each machine (offset toward room centre)
+  // Spread spots: use rows 18,20 and edges for natural spread
+  const jit = () => (Math.random()*4 - 2); // ±2px activity jitter
+  [
+    [10,17],[12,17],[14,17],[16,17],[18,17],[20,17],  // row 17 — near top equipment row
+    [10,18],[13,18],[17,18],[20,18],                   // row 18 — open working row
+    [12,19],[14,19],[18,19],[20,19],                   // row 19 — near mid equipment row
+    [10,20],[13,20],[17,20],[20,20],                   // row 20 — open working row
+    [12,21],[14,21],[18,21],[20,21],                   // row 21 — near bottom equipment row
+  ].forEach(([c,r],i) =>
+    spots[`gym_${i}`] = { id:`gym_${i}`, zone:'gym', px:(c*TILE+TILE/2+jit()), py:(r*TILE+TILE/2+jit()) });
+
+  // Shower: primary spots at/near shower heads, fill spots spread through room
+  [
+    [25,18],[26,18],[27,18],   // left stall area
+    [28,18],[29,18],[30,18],   // centre stall area
+    [31,18],[32,18],[33,18],   // right stall area
+    [24,17],[28,17],[32,17],   // back row spread
+    [25,19],[29,19],[33,19],   // front row spread
+    [24,20],[28,20],[32,20],   // lower spread
+  ].forEach(([c,r],i) =>
+    spots[`shower_${i}`] = { id:`shower_${i}`, zone:'shower', px:(c*TILE+TILE/2), py:(r*TILE+TILE/2) });
+
+  // Gang rally spots — A: left, B: center, C: right (yard rows 2–3)
+  [
+    ['A', [[4,2],[5,3],[7,2],[8,3],[6,2],[9,3]]],
+    ['B', [[18,2],[19,3],[21,2],[22,3],[20,2],[23,3]]],
+    ['C', [[33,2],[34,3],[36,2],[37,3],[35,2],[38,3]]],
+  ].forEach(([gid, coords]) =>
+    coords.forEach(([c,r],i) =>
+      spots[`gang_${gid}_${i}`] = { id:`gang_${gid}_${i}`, zone:'gang', groupId:gid,
+        px:(c*TILE+TILE/2+(Math.random()*4-2)), py:(r*TILE+TILE/2+(Math.random()*4-2)) }
+    )
+  );
+
+  // Cell spots from CELL_DEFS walkPos
+  for (const def of CELL_DEFS)
+    def.walkPos.forEach((p,i) => {
+      spots[`${def.id}_${i}`] = { id:`${def.id}_${i}`, zone:'cell', cellId:def.id,
+        px:(p.x*TILE+TILE/2), py:(p.y*TILE+TILE/2) };
+    });
+
+  return spots;
+})();
+
+// occupancy: spotId → inmateId
+const occupancy = new Map();
+
+function releaseSpot(inmateId) {
+  for (const [spotId, owner] of occupancy) {
+    if (owner === inmateId) { occupancy.delete(spotId); return; }
+  }
+}
+
+function claimSpot(zone, cellDef, inmateId, subzone = null) {
+  releaseSpot(inmateId);
+  const candidates = Object.values(SPOTS).filter(s => {
+    if (s.zone !== zone) return false;
+    if (subzone && s.subzone !== subzone) return false;
+    if (zone === 'cell' && s.cellId !== cellDef.id) return false;
+    if (zone === 'gang') {
+      const owner = GS.inmates.find(i => i.id === inmateId);
+      if (owner && s.groupId !== owner.groupId) return false;
+    }
+    return !occupancy.has(s.id);
+  });
+  if (candidates.length === 0) return null;
+
+  // Social tendency: soft preference for spots near same-category inmates
+  const self = GS.inmates.find(i => i.id === inmateId);
+  let spot;
+  if (self && zone !== 'cell') {
+    const sameKat = GS.inmates.filter(o => o.id !== inmateId && o.kategori === self.kategori);
+    const scored = candidates.map(s => {
+      let bonus = 0;
+      for (const o of sameKat) {
+        const dx = s.px - o.px, dy = s.py - o.py;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < TILE*4) bonus += 0.3 * (1 - d/(TILE*4));
+      }
+      return { s, score: 1 + Math.min(bonus, 1.0) }; // base 1.0, bonus capped at +1.0
+    });
+    const total = scored.reduce((sum, x) => sum + x.score, 0);
+    let r = Math.random() * total;
+    spot = scored[scored.length - 1].s; // fallback
+    for (const { s, score } of scored) {
+      r -= score;
+      if (r <= 0) { spot = s; break; }
+    }
+  } else {
+    spot = candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  occupancy.set(spot.id, inmateId);
+  return spot;
+}
+
+function fallbackPos(zone, cellDef, groupId = null) {
+  if (zone === 'cell') {
+    const p = cellDef.walkPos[Math.floor(Math.random() * cellDef.walkPos.length)];
+    return { px: p.x*TILE+TILE/2, py: p.y*TILE+TILE/2, id: null };
+  }
+  if (zone === 'cafeteria') return { px: (2+rInt(0,18))*TILE+TILE/2, py: (5+rInt(0,2))*TILE+TILE/2, id: null };
+  if (zone === 'yard')      return { px: (2+rInt(0,39))*TILE+TILE/2, py: rInt(2,3)*TILE+TILE/2, id: null };
+  if (zone === 'gang') {
+    const gs = Object.values(SPOTS).filter(s => s.zone === 'gang' && (!groupId || s.groupId === groupId));
+    if (gs.length) return gs[Math.floor(Math.random() * gs.length)];
+    return { px: rInt(4,38)*TILE+TILE/2, py: rInt(2,3)*TILE+TILE/2, id: null };
+  }
+  if (zone === 'gym')       return { px: (10+rInt(0,10))*TILE+TILE/2, py: (17+rInt(0,4))*TILE+TILE/2, id: null };
+  if (zone === 'shower')    return { px: (24+rInt(0,10))*TILE+TILE/2, py: (17+rInt(0,4))*TILE+TILE/2, id: null };
+  return { px: rInt(9,35)*TILE+TILE/2, py: rInt(12,23)*TILE+TILE/2, id: null };
+}
+
+// ================================================================
+// WAYPOINT PATH BUILDER
+// ================================================================
+function buildPath(inmate, targetZone, destSpot = null) {
+  const def = getCellDef(inmate.cellId);
+  const { doorCol, doorRow, innerCol, side } = def;
+  const pts = [];
+
+  const spot = destSpot || claimSpot(targetZone, def, inmate.id) || fallbackPos(targetZone, def, inmate.groupId);
+  inmate.currentSpotId = spot.id || null;
+  const dest = { px: spot.px, py: spot.py };
+
+  if (targetZone === inmate.zone) { pts.push(dest); return pts; }
+
+  // Choose east-west level: HORIZ_R (row 12) or CROSS_R (row 23, bottom).
+  // Lower blocks and gym/shower exits prefer the cross-corridor.
+  // Cafeteria and yard must use HORIZ_R (to reach col 21 vertical corridor).
+  const bottomProb = doorRow >= 20 ? 0.70 : doorRow >= 17 ? 0.50 : doorRow >= 13 ? 0.28 : 0.12;
+  const useBottom = Math.random() < bottomProb
+    && targetZone !== 'cafeteria' && targetZone !== 'yard' && targetZone !== 'gang';
+  let atRow = useBottom ? CROSS_R : HORIZ_R;
+
+  // ── EXIT ────────────────────────────────────────────────────────
+  if (inmate.zone === 'cell') {
+    pts.push(tp(doorCol, doorRow));
+    pts.push(tp(innerCol, doorRow));
+    pts.push(tp(innerCol, atRow));    // walk inner corridor up (HORIZ_R) or down (CROSS_R)
+
+  } else if (inmate.zone === 'yard' || inmate.zone === 'gang') {
+    // Exit yard/gang: 3-way weighted choice of gate used
+    const yExitR = Math.random();
+    const yExitVia = side === 'L'
+      ? (yExitR < 0.42 ? 'left' : yExitR < 0.80 ? 'center' : 'right')
+      : (yExitR < 0.42 ? 'right' : yExitR < 0.80 ? 'center' : 'left');
+    if (yExitVia === 'left') {
+      pts.push(tp(L_INNER, 3));
+      pts.push(tp(L_INNER, HORIZ_R));
+      atRow = HORIZ_R;
+    } else if (yExitVia === 'right') {
+      pts.push(tp(R_INNER, 3));
+      pts.push(tp(R_INNER, HORIZ_R));
+      atRow = HORIZ_R;
+    } else {
+      pts.push(tp(VERT_X, 3));
+      pts.push(tp(VERT_X, HORIZ_R));
+      atRow = HORIZ_R;
+    }
+
+  } else if (inmate.zone === 'cafeteria') {
+    // Exit cafeteria: 3-way weighted choice of exit used
+    const cExitR = Math.random();
+    const cExitVia = side === 'L'
+      ? (cExitR < 0.42 ? 'left' : cExitR < 0.80 ? 'center' : 'right')
+      : (cExitR < 0.42 ? 'right' : cExitR < 0.80 ? 'center' : 'left');
+    if (cExitVia === 'left') {
+      pts.push(tp(L_INNER, 6));
+      pts.push(tp(L_INNER, HORIZ_R));
+    } else if (cExitVia === 'right') {
+      pts.push(tp(R_INNER, 6));
+      pts.push(tp(R_INNER, HORIZ_R));
+    } else {
+      pts.push(tp(VERT_X, HORIZ_R));
+    }
+    atRow = HORIZ_R;
+
+  } else if (inmate.zone === 'gym') {
+    // Exit via left inner corridor; randomly choose top or bottom level
+    const gymExit = Math.random() < 0.45 ? CROSS_R : HORIZ_R;
+    pts.push(tp(L_INNER, 17));        // step out of gym to inner corridor
+    pts.push(tp(L_INNER, gymExit));
+    atRow = gymExit;
+
+  } else if (inmate.zone === 'shower') {
+    // Exit via right inner corridor
+    const shwExit = Math.random() < 0.45 ? CROSS_R : HORIZ_R;
+    pts.push(tp(R_INNER, 17));
+    pts.push(tp(R_INNER, shwExit));
+    atRow = shwExit;
+
+  } else {
+    // corridor — atRow already set
+  }
+
+  // ── ENTER ─────────────────────────────────────────────────────
+  if (targetZone === 'cell') {
+    // Navigate to inmate's own inner corridor, then walk to door row
+    pts.push(tp(innerCol, atRow));
+    pts.push(tp(innerCol, doorRow));
+    pts.push(tp(doorCol, doorRow));
+    pts.push(dest);
+
+  } else if (targetZone === 'cafeteria') {
+    // 3-way weighted entry: left (col 9) | center (col 21) | right (col 35)
+    const cEntR = Math.random();
+    const cEntVia = side === 'L'
+      ? (cEntR < 0.42 ? 'left' : cEntR < 0.80 ? 'center' : 'right')
+      : (cEntR < 0.42 ? 'right' : cEntR < 0.80 ? 'center' : 'left');
+    if (atRow === CROSS_R) pts.push(tp(cEntVia === 'center' ? VERT_X : (cEntVia === 'left' ? L_INNER : R_INNER), CROSS_R));
+    if (cEntVia === 'left') {
+      pts.push(tp(L_INNER, HORIZ_R));
+      pts.push(tp(L_INNER, 6));
+    } else if (cEntVia === 'right') {
+      pts.push(tp(R_INNER, HORIZ_R));
+      pts.push(tp(R_INNER, 6));
+    } else {
+      pts.push(tp(VERT_X, HORIZ_R));
+      pts.push(tp(VERT_X, 6));
+    }
+    pts.push(dest);
+
+  } else if (targetZone === 'yard') {
+    // 3-way weighted entry: left (col 9) | center (col 21) | right (col 35)
+    const yEntR = Math.random();
+    const yEntVia = side === 'L'
+      ? (yEntR < 0.42 ? 'left' : yEntR < 0.80 ? 'center' : 'right')
+      : (yEntR < 0.42 ? 'right' : yEntR < 0.80 ? 'center' : 'left');
+    if (atRow === CROSS_R) pts.push(tp(yEntVia === 'center' ? VERT_X : (yEntVia === 'left' ? L_INNER : R_INNER), CROSS_R));
+    if (yEntVia === 'left') {
+      pts.push(tp(L_INNER, HORIZ_R));
+      pts.push(tp(L_INNER, 4));
+      pts.push(tp(L_INNER, 2));
+    } else if (yEntVia === 'right') {
+      pts.push(tp(R_INNER, HORIZ_R));
+      pts.push(tp(R_INNER, 4));
+      pts.push(tp(R_INNER, 2));
+    } else {
+      pts.push(tp(VERT_X, HORIZ_R));
+      pts.push(tp(VERT_X, 5));
+      pts.push(tp(VERT_X, 3));
+    }
+    pts.push(dest);
+
+  } else if (targetZone === 'gang') {
+    // Enter gang rally point — same routing as yard (same physical space)
+    const gEntR = Math.random();
+    const gEntVia = side === 'L'
+      ? (gEntR < 0.42 ? 'left' : gEntR < 0.80 ? 'center' : 'right')
+      : (gEntR < 0.42 ? 'right' : gEntR < 0.80 ? 'center' : 'left');
+    if (atRow === CROSS_R) pts.push(tp(gEntVia === 'center' ? VERT_X : (gEntVia === 'left' ? L_INNER : R_INNER), CROSS_R));
+    if (gEntVia === 'left') {
+      pts.push(tp(L_INNER, HORIZ_R));
+      pts.push(tp(L_INNER, 4));
+      pts.push(tp(L_INNER, 2));
+    } else if (gEntVia === 'right') {
+      pts.push(tp(R_INNER, HORIZ_R));
+      pts.push(tp(R_INNER, 4));
+      pts.push(tp(R_INNER, 2));
+    } else {
+      pts.push(tp(VERT_X, HORIZ_R));
+      pts.push(tp(VERT_X, 5));
+      pts.push(tp(VERT_X, 3));
+    }
+    pts.push(dest);
+
+  } else if (targetZone === 'gym') {
+    // Enter gym via left inner corridor (col 9 → col 10 at row 17)
+    // Does NOT route through col 21 — avoids vertical corridor bottleneck
+    pts.push(tp(L_INNER, atRow));          // walk to left inner at chosen level
+    pts.push(tp(L_INNER, 17));             // down inner to gym row
+    const gx = 10 + Math.floor(Math.random() * 5);
+    pts.push(tp(gx, 17));                  // step right into gym top
+    pts.push(dest);
+
+  } else if (targetZone === 'shower') {
+    // Enter shower via right inner corridor (col 35 → col 34 at row 17)
+    // Does NOT route through col 21
+    pts.push(tp(R_INNER, atRow));          // walk to right inner at chosen level
+    pts.push(tp(R_INNER, 17));             // down inner to shower row
+    const sx = 29 + Math.floor(Math.random() * 5);
+    pts.push(tp(sx, 17));                  // step left into shower top
+    pts.push(dest);
+  }
+
+  return pts;
+}
+
+// ================================================================
+// INMATE CLASS
+// ================================================================
+let UID = 1;
+const NAMES = [
+  'Erik Dahl','Lars Berg','Knut Vik','Ole Moe','Jan Bye','Per Rud',
+  'Tor Lund','Arne Foss','Ivar Nag','Bjørn Hov','Rolf Ask','Geir Sol',
+];
+
+const CLOTH_COLORS = ['#c85020','#3858a0','#a02020','#607838','#703898','#a0943a'];
+const SKIN_TONES   = ['#f0c888','#d4906a','#b06838','#7c4020'];
+const HAIR_COLORS  = ['#181008','#4c3018','#787878','#b09838'];
+const KATEGORIER   = ['vold','økonomi','narkotika','tyveri','annet'];
+
+class Inmate {
+  constructor(cellId) {
+    this.id            = UID++;
+    this.name          = NAMES[(this.id-1) % NAMES.length];
+    this.cellId        = cellId;
+    this.cellSlot      = 0;
+    this.groupId       = ['A','B','C'][this.id % 3];
+    this.zone          = 'cell';
+    this.targetZone    = 'cell';
+    this.waypoints     = [];
+    this.speed         = 0.52 + Math.random()*0.28;
+    this.currentSpotId    = null;
+    this.phaseDelay       = 0;
+    this.pendingZone      = null;
+    this.cafState         = null;  // null | 'to_counter' | 'to_seat' | 'seated'
+    this.cafSeat          = null;
+    this.cafCounterDelay  = 0;
+    this.cafCounterTarget = 0;
+    this.sleepState       = null;  // null | 'to_bed' | 'going_to_bed' | 'in_bed'
+
+    // Core stats
+    this.unrest   = 10 + Math.random()*20;
+    this.health   = 80 + Math.random()*20;
+    this.energi   = 40 + Math.random()*60;   // 0–100, drains when active, recharges at night
+    this.hygiene  = 40 + Math.random()*60;   // 0–100, drains over time, recharges in shower
+    this.disiplin = 20 + Math.random()*80;   // 0–100, erodes when unrest is high
+    this.dominans = 10 + Math.random()*90;   // 0–100, drifts slowly toward mean
+
+    // Sentence in simulated days
+    this.soningstidTotalt = 20 + Math.floor(Math.random()*61);  // 20–80 dager
+    this.soningstidIgjen  = this.soningstidTotalt;
+
+    // Starting position
+    const def = getCellDef(cellId);
+    const pos = def.walkPos[0];
+    this.px = pos.x * TILE + TILE/2;
+    this.py = pos.y * TILE + TILE/2;
+
+    // Crime category
+    this.kategori = KATEGORIER[Math.floor(Math.random()*KATEGORIER.length)];
+
+    // Visual look — generated once, stays with this inmate
+    const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+    this.look = {
+      clothColor: pick(CLOTH_COLORS),
+      skinTone:   pick(SKIN_TONES),
+      hairStyle:  Math.random() < 0.20 ? 0 : (Math.random() < 0.60 ? 1 : 2), // 0=skallete 1=kort 2=hette
+      hairColor:  pick(HAIR_COLORS),
+      beard:      Math.random() < 0.30,
+      scar:       Math.random() < 0.15,
+      sizeFactor: 0.85 + Math.random()*0.30,
+    };
+  }
+
+  // Called by tick() — staggerMs delays before the path is actually built
+  setTargetZone(zone, staggerMs = 0) {
+    if (staggerMs > 0) {
+      this.pendingZone = zone;
+      this.phaseDelay  = staggerMs;
+      return;
+    }
+    this._applyZoneChange(zone);
+  }
+
+  _applyZoneChange(zone) {
+    if (zone === this.targetZone && zone === this.zone) return;
+    // Snap current zone from tile position
+    const tx = (this.px / TILE) | 0;
+    const ty = (this.py / TILE) | 0;
+    const tile = GS.map[ty]?.[tx];
+    if (tile) {
+      const z = tile.zone;
+      if      (z === 'cell'      ) this.zone = 'cell';
+      else if (z === 'cafeteria' ) this.zone = 'cafeteria';
+      else if (z === 'yard'      ) this.zone = 'yard';
+      else if (z === 'gym'       ) this.zone = 'gym';
+      else if (z === 'shower'    ) this.zone = 'shower';
+      else                         this.zone = 'corridor';
+    }
+    this.targetZone  = zone;
+    this.pendingZone = null;
+
+    if (zone === 'cafeteria') {
+      // Two-step: counter (food pick-up) → seat
+      const def = getCellDef(this.cellId);
+      const counterSpot = claimSpot('cafeteria', def, this.id, 'counter')
+                       || fallbackPos('cafeteria', def);
+      this.cafState         = 'to_counter';
+      this.cafSeat          = null;
+      this.cafCounterDelay  = 0;
+      this.cafCounterTarget = 1000 + Math.random() * 1000; // 1–2 s pause at counter
+      this.currentSpotId    = counterSpot.id || null;
+      this.waypoints        = buildPath(this, 'cafeteria', counterSpot);
+      this.sleepState       = null;
+    } else if (zone === 'cell') {
+      this.cafState   = null;
+      this.cafSeat    = null;
+      // Night: will walk to bed after arriving in cell
+      this.sleepState = PHASES[GS.phaseIndex] === 'Natt' ? 'to_bed' : null;
+      this.waypoints  = buildPath(this, 'cell');
+    } else {
+      this.cafState   = null;
+      this.cafSeat    = null;
+      this.sleepState = null;
+      this.waypoints  = buildPath(this, zone);
+    }
+  }
+
+  move(dt) {
+    // Handle stagger delay
+    if (this.phaseDelay > 0) {
+      this.phaseDelay -= dt;
+      if (this.phaseDelay <= 0 && this.pendingZone) {
+        this._applyZoneChange(this.pendingZone);
+      }
+      return;
+    }
+
+    if (this.waypoints.length === 0) {
+      // Cafeteria sub-state machine
+      if (this.cafState === 'to_counter') {
+        this.cafCounterDelay += dt;
+        if (this.cafCounterDelay >= this.cafCounterTarget) {
+          const def  = getCellDef(this.cellId);
+          const seat = claimSpot('cafeteria', def, this.id, 'seat')
+                    || fallbackPos('cafeteria', def);
+          this.cafSeat   = seat;
+          this.waypoints = [{ px: seat.px, py: seat.py }];
+          this.cafState  = 'to_seat';
+        }
+        return;
+      }
+      if (this.cafState === 'to_seat') {
+        this.cafState = 'seated';
+        return;
+      }
+
+      // Sleep state machine — walk to bed, then lie down
+      if (this.sleepState === 'to_bed' && this.zone === 'cell') {
+        const def = getCellDef(this.cellId);
+        const bed = def.beds[this.cellSlot] || def.beds[0];
+        this.waypoints = [{ px: bed.x * TILE + TILE / 2, py: bed.y * TILE + TILE / 2 }];
+        this.sleepState = 'going_to_bed';
+        return;
+      }
+      if (this.sleepState === 'going_to_bed') {
+        this.sleepState = 'in_bed';
+        return;
+      }
+
+      // No wander during night, shower, or while seated eating
+      const isNight  = PHASES[GS.phaseIndex] === 'Natt';
+      const isShower = this.zone === 'shower';
+      const isSeated = this.cafState === 'seated';
+      const isInBed  = this.sleepState === 'in_bed';
+      if (!isNight && !isShower && !isSeated && !isInBed && Math.random() < 0.001) {
+        this.waypoints = buildPath(this, this.targetZone);
+      }
+      return;
+    }
+    const wp = this.waypoints[0];
+    const dx = wp.px - this.px, dy = wp.py - this.py;
+    const d  = Math.sqrt(dx*dx + dy*dy);
+    if (d < 2) {
+      this.px = wp.px; this.py = wp.py;
+      this.waypoints.shift();
+      if (this.waypoints.length === 0) this.zone = this.targetZone;
+    } else {
+      const spd = this.speed * dt * 0.054;
+      this.px += dx/d * spd;
+      this.py += dy/d * spd;
+    }
+  }
+}
+
+// ================================================================
+// GUARD CLASS
+// ================================================================
+class Guard {
+  constructor(patrol, pi = 0) {
+    this.patrol = patrol;
+    this.pi     = pi;
+    this.px     = patrol[pi].x * TILE + TILE/2;
+    this.py     = patrol[pi].y * TILE + TILE/2;
+    this.speed  = 0.75;
+  }
+
+  move(dt) {
+    const g = this.patrol[this.pi];
+    const tx = g.x*TILE + TILE/2, ty = g.y*TILE + TILE/2;
+    const dx = tx - this.px, dy = ty - this.py;
+    const d  = Math.sqrt(dx*dx + dy*dy);
+    if (d < 3) {
+      this.pi = (this.pi + 1) % this.patrol.length;
+    } else {
+      const spd = this.speed * dt * 0.054;
+      this.px += dx/d * spd;
+      this.py += dy/d * spd;
+    }
+  }
+}
+
+// ================================================================
+// SPAWN
+// ================================================================
+function spawn() {
+  for (const def of CELL_DEFS) {
+    for (let slot = 0; slot < 2; slot++) {
+      const inm = new Inmate(def.id);
+      inm.cellSlot = slot;
+      const wp = def.walkPos[slot] || def.walkPos[0];
+      inm.px = wp.x * TILE + TILE / 2;
+      inm.py = wp.y * TILE + TILE / 2;
+      GS.inmates.push(inm);
+    }
+  }
+
+  // Guard 1: horizontal spine patrol (east-west sweep along row 12)
+  GS.guards.push(new Guard([{x:5,y:12},{x:21,y:12},{x:38,y:12},{x:21,y:12}]));
+  // Guard 2: inner corridors + bottom cross (full perimeter loop)
+  GS.guards.push(new Guard([{x:9,y:9},{x:9,y:23},{x:35,y:23},{x:35,y:9}]));
+  // Guard 3: cafeteria + yard via vertical corridor
+  GS.guards.push(new Guard([{x:21,y:6},{x:8,y:6},{x:21,y:6},{x:21,y:2},{x:21,y:6},{x:34,y:6}]));
+  // Guard 4: vertical spine + gym/shower observer (panoptikon guard)
+  GS.guards.push(new Guard([{x:21,y:12},{x:21,y:5},{x:21,y:12},{x:21,y:19},{x:21,y:12}]));
+}
+
+// ================================================================
+// SIMULATION TICK
+// ================================================================
+const TICK_MS = 900;
+let tickTimer = 0;
+
+function tick() {
+  // Advance phase
+  GS.phaseTick += GS.speed;
+  if (GS.phaseTick >= PHASE_TICKS[PHASES[GS.phaseIndex]]) {
+    GS.phaseTick = 0;
+    GS.phaseIndex = (GS.phaseIndex + 1) % PHASES.length;
+    if (GS.phaseIndex === 0) {
+      GS.day++;
+      // Sentence countdown — one sim day passes
+      for (let i = GS.inmates.length - 1; i >= 0; i--) {
+        GS.inmates[i].soningstidIgjen--;
+        if (GS.inmates[i].soningstidIgjen <= 0) {
+          const cellId = GS.inmates[i].cellId;
+          GS.inmates.splice(i, 1);
+          const fresh = new Inmate(cellId);
+          fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
+          GS.inmates.push(fresh);
+        }
+      }
+    }
+    const newZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
+    for (let i = 0; i < GS.inmates.length; i++) {
+      const delay = i * 350 + Math.random() * 200;
+      GS.inmates[i].setTargetZone(newZone, delay);
+    }
+  }
+
+  // Unrest + stat dynamics
+  const phase   = PHASES[GS.phaseIndex];
+  const isNight = phase === 'Natt';
+  for (const inm of GS.inmates) {
+    let delta = 0;
+    if (isNight) {
+      // Night: unrest drops slowly while inmates sleep in their cells
+      delta = -0.8;
+    } else {
+      for (const other of GS.inmates) {
+        if (other === inm) continue;
+        const dx = other.px - inm.px, dy = other.py - inm.py;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < TILE*3) {
+          // Same category → less tension; different → more
+          const factor = other.kategori === inm.kategori ? 0.15 : 0.35;
+          delta += factor * (1 - d/(TILE*3));
+          // Same gang → calming; different gang → tension
+          const gangFactor = other.groupId === inm.groupId ? -0.10 : 0.32;
+          delta += gangFactor * (1 - d/(TILE*3));
+        }
+      }
+      for (const g of GS.guards) {
+        const dx = g.px - inm.px, dy = g.py - inm.py;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < TILE*5) delta -= 1.1 * (1 - d/(TILE*5));
+      }
+      delta += (22 - inm.unrest) * 0.012; // gentle mean-reversion
+    }
+    inm.unrest = Math.max(0, Math.min(100, inm.unrest + delta));
+
+    // energi: recharges at night, drains during gym, slow passive drain otherwise
+    if (isNight)           inm.energi = Math.min(100, inm.energi + 2.5);
+    else if (phase==='Formiddag') inm.energi = Math.max(0, inm.energi - 1.2);
+    else                   inm.energi = Math.max(0, inm.energi - 0.3);
+
+    // hygiene: recharges in shower phase, slow passive drain otherwise
+    if (phase === 'Kveld') inm.hygiene = Math.min(100, inm.hygiene + 4.0);
+    else                   inm.hygiene = Math.max(0,   inm.hygiene - 0.5);
+
+    // disiplin: erodes when unrest high, recovers slightly when calm
+    inm.disiplin = Math.max(0, Math.min(100, inm.disiplin + (inm.unrest > 50 ? -0.4 : 0.1)));
+
+    // dominans: very slow drift toward individual baseline (no sudden changes)
+    inm.dominans = Math.max(0, Math.min(100, inm.dominans + (50 - inm.dominans) * 0.005));
+  }
+
+  GS.totalUnrest = GS.inmates.length
+    ? GS.inmates.reduce((s,i) => s+i.unrest, 0) / GS.inmates.length
+    : 0;
+}
+
+// ================================================================
+// RENDERER
+// ================================================================
+const PHASE_TINT = {
+  'Morgen':      'rgba(255,180,60,0.025)',
+  'Formiddag':   'rgba(80,40,20,0.02)',
+  'Ettermiddag': null,
+  'Kveld':       'rgba(40,60,120,0.03)',
+  'Natt':        'rgba(0,10,40,0.12)',
+};
+
+const ZONE_LBL = {
+  cell:'Celle', cafeteria:'Kantine', yard:'Utegård',
+  corridor:'Korridor', center:'Korridor',
+  gym:'Treningsrom', shower:'Dusj',
+};
+
+/// Cell regions: [leftCol, topRow, widthTiles, heightTiles] for each of the 8 cells
+const CELL_REGIONS = [
+  [1,10,8,2],[1,14,8,2],[1,18,8,2],[1,21,8,2],  // left cells L1-L4
+  [36,10,7,2],[36,14,7,2],[36,18,7,2],[36,21,7,2], // right cells R1-R4
+];
+
+function renderMap() {
+  for (let y=0; y<ROWS; y++)
+    for (let x=0; x<COLS; x++) {
+      const t = GS.map[y][x];
+      (DRAWERS[t.type] || DRAWERS.wall)(ctx, x*TILE, y*TILE, TILE);
+    }
+  // Subtle cell room outlines — part of the environment, not UI
+  ctx.save();
+  ctx.strokeStyle = 'rgba(160,185,210,0.09)';
+  ctx.lineWidth = 1;
+  for (const [cx, cy, cw, ch] of CELL_REGIONS) {
+    ctx.strokeRect(cx*TILE + 0.5, cy*TILE + 0.5, cw*TILE - 1, ch*TILE - 1);
+  }
+  ctx.restore();
+}
+
+function renderLabels() {
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.font = `${TILE*0.5|0}px monospace`;
+  ctx.fillText('UTEGÅRD',  21.5*TILE, 2.5*TILE);
+  ctx.fillText('KANTINE',  21.5*TILE, 6.5*TILE);
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  ctx.font = `${TILE*0.4|0}px monospace`;
+  ctx.fillText('GYM',     15*TILE,   19*TILE);
+  ctx.fillText('DUSJ',    29*TILE,   19*TILE);
+  ctx.fillText('CELLE',   4.5*TILE,  16*TILE);
+  ctx.fillText('CELLE',   39.5*TILE, 16*TILE);
+  ctx.restore();
+}
+
+const GANG_COLOR = { A: '#c83030', B: '#2858c8', C: '#28a040' };
+
+function renderInmates() {
+  for (const inm of GS.inmates) {
+    const { look } = inm;
+    const base = TILE * 0.29 * look.sizeFactor;
+    const br   = base * 0.56;   // body radius
+    const hr   = base * 0.40;   // head radius
+    const bx   = inm.px, by = inm.py + base * 0.18;   // body centre
+    const hx   = inm.px, hy = inm.py - base * 0.44;   // head centre
+    const gangColor = GANG_COLOR[inm.groupId] || '#888';
+
+    // Gang glow — behind everything
+    ctx.save();
+    ctx.globalAlpha = 0.13;
+    ctx.fillStyle = gangColor;
+    ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 3.5, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    // Selection ring
+    if (inm.id === GS.selectedId) {
+      ctx.strokeStyle = '#d8c058'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 4, 0, Math.PI*2); ctx.stroke();
+    }
+
+    // Body (clothing colour)
+    ctx.fillStyle = look.clothColor;
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+
+    // Gang chest symbol — on top of body, behind head
+    ctx.save();
+    ctx.fillStyle = gangColor; ctx.globalAlpha = 0.82;
+    const ss = br * 0.48;
+    if (inm.groupId === 'A') {
+      ctx.beginPath(); ctx.moveTo(bx, by-ss); ctx.lineTo(bx+ss*0.85, by+ss*0.5); ctx.lineTo(bx-ss*0.85, by+ss*0.5); ctx.closePath(); ctx.fill();
+    } else if (inm.groupId === 'B') {
+      ctx.beginPath(); ctx.arc(bx, by, ss*0.6, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillRect(bx-ss*0.6, by-ss*0.6, ss*1.2, ss*1.2);
+    }
+    ctx.restore();
+
+    // Head (skin tone)
+    ctx.fillStyle = look.skinTone;
+    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
+
+    // Hair
+    if (look.hairStyle > 0) {
+      ctx.fillStyle = look.hairColor;
+      const capR = look.hairStyle === 2 ? hr * 1.18 : hr;
+      ctx.beginPath(); ctx.arc(hx, hy, capR, Math.PI, 0); ctx.fill();
+    }
+
+    // Beard
+    if (look.beard) {
+      ctx.fillStyle = look.hairColor;
+      ctx.beginPath(); ctx.arc(hx, hy + hr * 0.52, hr * 0.52, 0, Math.PI); ctx.fill();
+    }
+
+    // Scar
+    if (look.scar) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(200,110,70,0.75)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(hx - hr*0.35, hy - hr*0.25);
+      ctx.lineTo(hx + hr*0.20, hy + hr*0.35);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Gang bandana — stripe across head, over hair
+    ctx.save();
+    ctx.fillStyle = gangColor; ctx.globalAlpha = 0.70;
+    ctx.fillRect(hx - hr*1.05, hy - hr*0.18, hr*2.1, 2);
+    ctx.restore();
+
+    // Shower effect — animated water droplets above head
+    if (inm.zone === 'shower') {
+      ctx.save();
+      ctx.fillStyle = '#80c8f8';
+      ctx.globalAlpha = 0.55 + Math.sin(Date.now()*0.003 + inm.id) * 0.20;
+      for (let i = -1; i <= 1; i++) {
+        const dy = ((Date.now()*0.0015 + inm.id*0.5 + i*0.5) % 1) * hr*2;
+        ctx.beginPath(); ctx.arc(hx + i*hr*0.7, hy - hr*1.1 - dy, 1, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Unrest indicator dot
+    const uc = inm.unrest>70 ? '#cc3030' : inm.unrest>40 ? '#c07828' : '#30904c';
+    ctx.fillStyle = uc;
+    ctx.beginPath(); ctx.arc(inm.px + base*0.55, inm.py - base*0.62, 2.5, 0, Math.PI*2); ctx.fill();
+
+    // Sleep indicator — visible only when actually lying in bed
+    if (inm.sleepState === 'in_bed') {
+      const floatY = Math.sin(Date.now() * 0.0015 + inm.id) * 2;
+      ctx.save();
+      ctx.globalAlpha = 0.55 + Math.sin(Date.now() * 0.002 + inm.id * 1.3) * 0.20;
+      ctx.fillStyle = '#b8d4f0';
+      ctx.font = `bold ${TILE*0.55|0}px monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('z', hx + base*0.5, hy - hr - base*0.7 + floatY);
+      ctx.restore();
+    }
+
+    // Eating indicator — visible only when fully seated at table
+    if (PHASE_ZONE[PHASES[GS.phaseIndex]] === 'cafeteria' && inm.cafState === 'seated') {
+      ctx.save();
+      ctx.globalAlpha = 0.60;
+      ctx.fillStyle = '#e8c878';
+      ctx.font = `bold ${TILE*0.50|0}px monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('\u2227', hx, hy - hr - base*0.6);
+      ctx.restore();
+    }
+  }
+}
+
+function renderGuards() {
+  for (const g of GS.guards) {
+    const base = TILE * 0.33;
+    const br   = base * 0.58;
+    const hr   = base * 0.40;
+    const bx   = g.px, by = g.py + base * 0.18;
+    const hx   = g.px, hy = g.py - base * 0.44;
+
+    // Body — navy uniform
+    ctx.fillStyle = '#1e3a6e';
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#2a5090'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
+
+    // Belt — gold stripe across body centre
+    ctx.fillStyle = '#c8a840';
+    ctx.fillRect(bx - br * 0.9, by - 1.5, br * 1.8, 2.5);
+
+    // Head — neutral skin tone
+    ctx.fillStyle = '#c09060';
+    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
+
+    // Cap — dark dome over top half of head
+    ctx.fillStyle = '#0f1e40';
+    ctx.beginPath(); ctx.arc(hx, hy, hr * 1.22, Math.PI, 0); ctx.fill();
+    // Cap brim — thin horizontal stripe at base of cap
+    ctx.fillRect(hx - hr * 1.35, hy - 1, hr * 2.7, 2);
+  }
+}
+
+function renderTint() {
+  const tint = PHASE_TINT[PHASES[GS.phaseIndex]];
+  if (tint) {
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  renderMap();
+  renderLabels();
+  renderInmates();
+  renderGuards();
+  renderTint();
+}
+
+// ================================================================
+// UI UPDATE
+// ================================================================
+let uiTimer = 0;
+
+function updateUI() {
+  const phase = PHASES[GS.phaseIndex];
+  document.getElementById('phase-display').textContent = phase;
+  document.getElementById('day-display').textContent   = `Dag ${GS.day}`;
+  document.querySelectorAll('.pb').forEach(b => b.classList.toggle('on', b.dataset.p === phase));
+
+  const u = Math.round(GS.totalUnrest);
+  const uEl = document.getElementById('s-unrest');
+  uEl.textContent = u + '%';
+  uEl.className = 'val ' + (u>70?'hi':u>40?'md':'lo');
+  document.getElementById('s-count').textContent  = GS.inmates.length;
+  document.getElementById('s-guards').textContent = GS.guards.length;
+
+  // Inmate list
+  const list = document.getElementById('ilist');
+  list.innerHTML = '';
+  for (const inm of GS.inmates) {
+    const div = document.createElement('div');
+    div.className = 'ir' + (inm.id===GS.selectedId?' sel':'');
+    const u2 = Math.round(inm.unrest);
+    const fc = u2>70?'#c83030':u2>40?'#b07828':'#308848';
+    div.innerHTML = `
+      <div class="ir-name">${inm.name} <span style="color:#445;font-size:0.62rem">[${inm.cellId}]</span></div>
+      <div class="ub"><div class="uf" style="width:${u2}%;background:${fc}"></div></div>`;
+    div.addEventListener('click', () => {
+      GS.selectedId = (inm.id===GS.selectedId) ? null : inm.id;
+    });
+    list.appendChild(div);
+  }
+
+  // Detail panel
+  const sel = GS.inmates.find(i => i.id===GS.selectedId);
+  const dp  = document.getElementById('detail');
+  if (sel) {
+    const u3 = Math.round(sel.unrest);
+    const sentPct = Math.round((sel.soningstidIgjen / sel.soningstidTotalt) * 100);
+    dp.innerHTML = `
+      <h4>${sel.name}</h4>
+      <div class="dr"><span class="dl">Celle</span><span class="dv">${sel.cellId}</span></div>
+      <div class="dr"><span class="dl">Dom</span><span class="dv">${sel.kategori}</span></div>
+      <div class="dr"><span class="dl">Sone</span><span class="dv">${ZONE_LBL[sel.zone]||sel.zone}</span></div>
+      <div class="dr"><span class="dl">Uro</span><span class="dv">${u3}%</span></div>
+      <div class="dr"><span class="dl">Helse</span><span class="dv">${Math.round(sel.health)}%</span></div>
+      <div class="dr"><span class="dl">Energi</span><span class="dv">${Math.round(sel.energi)}%</span></div>
+      <div class="dr"><span class="dl">Hygiene</span><span class="dv">${Math.round(sel.hygiene)}%</span></div>
+      <div class="dr"><span class="dl">Disiplin</span><span class="dv">${Math.round(sel.disiplin)}%</span></div>
+      <div class="dr"><span class="dl">Dominans</span><span class="dv">${Math.round(sel.dominans)}%</span></div>
+      <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>`;
+  } else {
+    dp.innerHTML = '<span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>';
+  }
+}
+
+// ================================================================
+// CONTROLS
+// ================================================================
+document.querySelectorAll('.sb').forEach(btn => {
+  btn.addEventListener('click', () => {
+    GS.speed = parseInt(btn.dataset.s);
+    document.querySelectorAll('.sb').forEach(b => b.classList.toggle('on', b===btn));
+  });
+});
+
+document.querySelectorAll('.pb').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const idx = PHASES.indexOf(btn.dataset.p);
+    if (idx === -1) return;
+    GS.phaseIndex = idx;
+    GS.phaseTick  = 0;
+    const newZone = PHASE_ZONE[PHASES[idx]];
+    for (let i = 0; i < GS.inmates.length; i++) {
+      const delay = i * 350 + Math.random() * 200;
+      GS.inmates[i].setTargetZone(newZone, delay);
+    }
+  });
+});
+
+// Click outside inmate list / detail panel → deselect
+document.addEventListener('click', e => {
+  if (!e.target.closest('#inmate-section, #detail')) GS.selectedId = null;
+});
+
+// ESC → deselect
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') GS.selectedId = null;
+});
+
+// ================================================================
+// MAIN LOOP
+// ================================================================
+let lastTs = 0;
+
+function loop(ts) {
+  const dt = Math.min(ts - lastTs, 50);
+  lastTs = ts;
+
+  for (const inm of GS.inmates) inm.move(dt);
+  for (const g   of GS.guards)   g.move(dt);
+
+  tickTimer += dt;
+  if (tickTimer >= TICK_MS) { tickTimer = 0; tick(); }
+
+  render();
+
+  uiTimer += dt;
+  if (uiTimer >= 180) { uiTimer = 0; updateUI(); }
+
+  requestAnimationFrame(loop);
+}
+
+// ================================================================
+// INIT
+// ================================================================
+GS.map = buildMap();
+spawn();
+const initZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
+for (const inm of GS.inmates) inm.setTargetZone(initZone);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
