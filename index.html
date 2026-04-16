@@ -54,16 +54,20 @@ canvas { display:block; flex-shrink:0; }
   background:#1a1e24; border:1px solid #30363e; color:#777;
   padding:2px 7px; font-family:monospace; font-size:0.7rem;
   cursor:pointer; border-radius:2px;
+  transition: border-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
-.sb:hover { background:#22282e; }
-.sb.on { background:#202838; border-color:#c8b460; color:#c8b460; }
+.sb:hover { background:#22282e; border-color:#4a5560; color:#aaa; }
+.sb.on { background:#202838; border-color:#c8b460; color:#c8b460;
+         box-shadow: 0 0 6px rgba(200,180,96,0.18); }
 .pb {
   background:#1a1e24; border:1px solid #30363e; color:#667;
   padding:2px 6px; font-family:monospace; font-size:0.63rem;
   cursor:pointer; border-radius:2px; flex:1;
+  transition: border-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
-.pb:hover { background:#22282e; color:#888; }
-.pb.on { background:#1e2030; border-color:#8870a0; color:#b090d0; }
+.pb:hover { background:#1c2028; border-color:#445560; color:#99a; }
+.pb.on { background:#1e2030; border-color:#8870a0; color:#c0a0e0;
+         box-shadow: 0 0 5px rgba(136,112,160,0.2); }
 #menu {
   position:fixed; inset:0; background:#0a0c0e;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
@@ -490,6 +494,7 @@ const GS = {
   map:     null,
   totalUnrest: 0,
   selectedId: null,
+  hoverId:    null,
 };
 
 // ================================================================
@@ -861,7 +866,8 @@ class Inmate {
     this.cafSeat          = null;
     this.cafCounterDelay  = 0;
     this.cafCounterTarget = 0;
-    this.sleepState       = null;  // null | 'to_bed' | 'going_to_bed' | 'in_bed'
+    this.sleepState          = null;   // null | 'to_bed' | 'going_to_bed' | 'in_bed'
+    this.isBeingIntervened   = false;
 
     // Core stats
     this.unrest   = 10 + Math.random()*20;
@@ -996,9 +1002,10 @@ class Inmate {
       // No wander during night, shower, or while seated eating
       const isNight  = PHASES[GS.phaseIndex] === 'Natt';
       const isShower = this.zone === 'shower';
-      const isSeated = this.cafState === 'seated';
-      const isInBed  = this.sleepState === 'in_bed';
-      if (!isNight && !isShower && !isSeated && !isInBed && Math.random() < 0.001) {
+      const isSeated     = this.cafState === 'seated';
+      const isInBed      = this.sleepState === 'in_bed';
+      const isIntervened = this.isBeingIntervened;
+      if (!isNight && !isShower && !isSeated && !isInBed && !isIntervened && Math.random() < 0.001) {
         this.waypoints = buildPath(this, this.targetZone);
       }
       return;
@@ -1023,14 +1030,63 @@ class Inmate {
 // ================================================================
 class Guard {
   constructor(patrol, pi = 0) {
-    this.patrol = patrol;
-    this.pi     = pi;
-    this.px     = patrol[pi].x * TILE + TILE/2;
-    this.py     = patrol[pi].y * TILE + TILE/2;
-    this.speed  = 0.75;
+    this.patrol            = patrol;
+    this.pi                = pi;
+    this.px                = patrol[pi].x * TILE + TILE/2;
+    this.py                = patrol[pi].y * TILE + TILE/2;
+    this.speed             = 0.75;
+    this.target            = null;  // Inmate being targeted, or null
+    this.interventionTimer = 0;     // ms spent intervening
+    this.scanTimer         = 0;     // ms until next target scan
   }
 
   move(dt) {
+    // Periodically scan for high-unrest target
+    this.scanTimer -= dt;
+    if (this.scanTimer <= 0 && !this.target) {
+      this.scanTimer = 2000;
+      let best = null, bestScore = -1;
+      for (const inm of GS.inmates) {
+        if (inm.unrest < 78) continue;
+        const dx = inm.px - this.px, dy = inm.py - this.py;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < TILE * 10) {
+          const score = inm.unrest - d * 0.05;
+          if (score > bestScore) { best = inm; bestScore = score; }
+        }
+      }
+      this.target = best;
+    }
+
+    if (this.target) {
+      // Drop target if inmate has calmed down
+      if (this.target.unrest < 40) {
+        this.target.isBeingIntervened = false;
+        this.target = null; this.interventionTimer = 0;
+      } else {
+        const dx = this.target.px - this.px, dy = this.target.py - this.py;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < TILE * 1.2) {
+          // Intervening: stand still, calm the inmate
+          this.target.isBeingIntervened = true;
+          this.target.waypoints = [];
+          this.target.unrest = Math.max(0, this.target.unrest - 2.5);
+          this.interventionTimer += dt;
+          if (this.interventionTimer >= 4000) {
+            this.target.isBeingIntervened = false;
+            this.target = null; this.interventionTimer = 0;
+          }
+        } else {
+          // Pursue — move directly toward inmate
+          const spd = this.speed * dt * 0.054;
+          this.px += dx/d * spd;
+          this.py += dy/d * spd;
+        }
+      }
+      return;
+    }
+
+    // Normal patrol
     const g = this.patrol[this.pi];
     const tx = g.x*TILE + TILE/2, ty = g.y*TILE + TILE/2;
     const dx = tx - this.px, dy = ty - this.py;
@@ -1229,6 +1285,12 @@ function renderInmates() {
     ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 3.5, 0, Math.PI*2); ctx.fill();
     ctx.restore();
 
+    // Hover ring
+    if (inm.id === GS.hoverId && inm.id !== GS.selectedId) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 3, 0, Math.PI*2); ctx.stroke();
+    }
+
     // Selection ring
     if (inm.id === GS.selectedId) {
       ctx.strokeStyle = '#d8c058'; ctx.lineWidth = 2;
@@ -1330,6 +1392,18 @@ function renderInmates() {
 
 function renderGuards() {
   for (const g of GS.guards) {
+    // Target ring — pulsing orange circle around targeted inmate
+    if (g.target) {
+      const pulse = 0.35 + Math.sin(Date.now() * 0.007) * 0.25;
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.strokeStyle = '#e06828';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(g.target.px, g.target.py, TILE * 0.58, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     const base = TILE * 0.33;
     const br   = base * 0.58;
     const hr   = base * 0.40;
@@ -1378,6 +1452,18 @@ function render() {
 // ================================================================
 // UI UPDATE
 // ================================================================
+function unrestReasons(inm) {
+  const r = [];
+  if (inm.hygiene  < 30) r.push('Dårlig hygiene');
+  if (inm.energi   < 25) r.push('Utmattet');
+  if (inm.disiplin < 25) r.push('Lav disiplin');
+  const rival = GS.inmates.some(o =>
+    o.id !== inm.id && o.groupId !== inm.groupId &&
+    Math.hypot(o.px - inm.px, o.py - inm.py) < TILE * 4);
+  if (rival) r.push('Nær rival');
+  if (inm.isBeingIntervened) r.push('Vakt griper inn');
+  return r.slice(0, 3);
+}
 let uiTimer = 0;
 
 function updateUI() {
@@ -1427,7 +1513,13 @@ function updateUI() {
       <div class="dr"><span class="dl">Hygiene</span><span class="dv">${Math.round(sel.hygiene)}%</span></div>
       <div class="dr"><span class="dl">Disiplin</span><span class="dv">${Math.round(sel.disiplin)}%</span></div>
       <div class="dr"><span class="dl">Dominans</span><span class="dv">${Math.round(sel.dominans)}%</span></div>
-      <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>`;
+      <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>
+      ${(() => {
+        const rs = unrestReasons(sel);
+        if (!rs.length) return '';
+        return `<div class="dr" style="margin-top:5px"><span class="dl">Uro-årsak</span></div>` +
+          rs.map(r => `<div class="dr"><span class="dv" style="color:#b06838">&#x2191; ${r}</span></div>`).join('');
+      })()}`;
   } else {
     dp.innerHTML = '<span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>';
   }
@@ -1457,9 +1549,33 @@ document.querySelectorAll('.pb').forEach(btn => {
   });
 });
 
+// Canvas — click to select inmate, mousemove to hover
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  let closest = null, closestD = TILE;
+  for (const inm of GS.inmates) {
+    const d = Math.hypot(inm.px - mx, inm.py - my);
+    if (d < closestD) { closest = inm; closestD = d; }
+  }
+  if (closest) GS.selectedId = closest.id === GS.selectedId ? null : closest.id;
+});
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  let closest = null, closestD = TILE * 1.2;
+  for (const inm of GS.inmates) {
+    const d = Math.hypot(inm.px - mx, inm.py - my);
+    if (d < closestD) { closest = inm; closestD = d; }
+  }
+  GS.hoverId = closest ? closest.id : null;
+  canvas.style.cursor = closest ? 'pointer' : 'default';
+});
+canvas.addEventListener('mouseleave', () => { GS.hoverId = null; canvas.style.cursor = 'default'; });
+
 // Click outside inmate list / detail panel → deselect
 document.addEventListener('click', e => {
-  if (!e.target.closest('#inmate-section, #detail')) GS.selectedId = null;
+  if (!e.target.closest('#inmate-section, #detail, #c')) GS.selectedId = null;
 });
 
 // ESC → deselect
