@@ -1784,12 +1784,12 @@ function runFriendFormation() {
   }
 }
 
-// Teller frivillige og påbegynte biblioteksbesøk; begrenser til antall spots (8)
+// Teller frivillige og påbegynte biblioteksbesøk; begrenser til antall spots (5)
 function libraryHasSpot() {
   const used = GS.inmates.filter(i =>
-    i.zone === 'library' || i.targetZone === 'library'
+    i.zone === 'library' || i.targetZone === 'library' || i.pendingZone === 'library'
   ).length;
-  return used < 8;
+  return used < 5;
 }
 
 // Velger aktivitet per fase — enkel prioritering på temperament/sosial/stress
