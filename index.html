@@ -46,21 +46,23 @@ canvas {
 .val.lo { color:#388050; }
 #inmate-section { flex:1; min-height:90px; overflow-y:auto; }
 #inmate-section h3 { font-size:0.6rem; letter-spacing:2px; color:#334; text-transform:uppercase; padding:6px 14px 5px; border-bottom:1px solid #1a1e24; }
-#filter-tabs {
+#gang-strip {
   display:flex; gap:3px;
   padding:6px 8px 4px; border-bottom:1px solid #1a1e24;
   position:sticky; top:0; background:#161a1e; z-index:2;
 }
-.ft {
+.gs {
   flex:1; text-align:center; cursor:pointer;
   background:#1a1e24; border:1px solid #252a32; border-radius:3px;
-  padding:4px 3px; font-size:0.56rem; color:#556; letter-spacing:0.3px;
+  padding:4px 3px; font-size:0.58rem; color:#667; letter-spacing:0.3px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
+  display:flex; align-items:center; justify-content:center; gap:4px;
 }
-.ft:hover { background:#22262e; color:#889; }
-.ft.on    { background:#22293a; border-color:#c8b460; color:#c8b460; }
-.ft-count { font-weight:700; margin-left:2px; }
+.gs:hover { background:#22262e; color:#889; }
+.gs.on    { background:#22293a; border-color:#c8b460; color:#c8b460; }
+.gs-dot   { display:inline-block; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.gs-count { font-weight:700; opacity:0.85; }
 .ir-empty { padding:12px; text-align:center; color:#334; font-size:0.65rem; }
 .ir.pinned { border-color:#665030; }
 .ir {
@@ -126,7 +128,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.7.0 &bull; 2025</p>
+  <p>Panoptikon v0.9.4 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-continue" disabled>Continue</button>
   <button class="mb" id="btn-load" disabled>Load</button>
@@ -135,7 +137,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.7.0</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.9.4</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -157,11 +159,12 @@ canvas {
   </div>
   <div id="inmate-section">
     <h3>Innsatte</h3>
-    <div id="filter-tabs">
-      <div class="ft on" data-f="all" title="Alle innsatte">Alle <span class="ft-count"></span></div>
-      <div class="ft"    data-f="iso" title="Innsatte på isolat">🔒 Isolat <span class="ft-count"></span></div>
-      <div class="ft"    data-f="con" title="Nylig i konflikt (siste 12s)">💥 Konflikt <span class="ft-count"></span></div>
-      <div class="ft"    data-f="hot" title="Uro over 70%">🔥 Høy uro <span class="ft-count"></span></div>
+    <div id="gang-strip">
+      <div class="gs on" data-f="all"   title="Alle innsatte">Alle <span class="gs-count"></span></div>
+      <div class="gs"    data-f="gA"    title="Gjeng A"><span class="gs-dot" style="background:#c83030"></span>A <span class="gs-count"></span></div>
+      <div class="gs"    data-f="gB"    title="Gjeng B"><span class="gs-dot" style="background:#2858c8"></span>B <span class="gs-count"></span></div>
+      <div class="gs"    data-f="gC"    title="Gjeng C"><span class="gs-dot" style="background:#28a040"></span>C <span class="gs-count"></span></div>
+      <div class="gs"    data-f="gNone" title="Uten gjeng"><span class="gs-dot" style="background:#444;border:1px solid #667"></span>Ingen <span class="gs-count"></span></div>
     </div>
     <div id="ilist"></div>
   </div>
@@ -361,12 +364,31 @@ function drawEquipment(ctx, px, py, T) {
   ctx.strokeRect(px+T-m-4, py+m+2, 4, T-m*2-4);
 }
 
+function drawIsoFloor(ctx, px, py, T) {
+  const pal = ['#2a3240','#252c38','#1f2530'];
+  ctx.fillStyle = pal[((px/T|0)+(py/T|0))%3];
+  ctx.fillRect(px, py, T, T);
+  ctx.fillStyle = 'rgba(40,50,64,0.4)';
+  ctx.fillRect(px, py, T, 1);
+}
+function drawCounselFloor(ctx, px, py, T) {
+  const pal = ['#3a5256','#365054','#324c50'];
+  ctx.fillStyle = pal[((px/T|0)+(py/T|0))%3];
+  ctx.fillRect(px, py, T, T);
+}
+function drawLibraryFloor(ctx, px, py, T) {
+  const pal = ['#5a4028','#553c24','#4e381f'];
+  ctx.fillStyle = pal[((px/T|0)+(py/T|0))%3];
+  ctx.fillRect(px, py, T, T);
+}
+
 const DRAWERS = {
   wall: drawWall, floor: drawFloor, cell_floor: drawCellFloor,
   door: drawDoor, bed: drawBed, toilet: drawToilet,
   fence: drawFence, yard: drawYard, table: drawTable,
   gym_floor: drawGymFloor, shower_floor: drawShowerFloor, equipment: drawEquipment,
   shower_head: drawShowerHead,
+  iso_floor: drawIsoFloor, counsel_floor: drawCounselFloor, library_floor: drawLibraryFloor,
 };
 
 // ================================================================
@@ -477,6 +499,22 @@ function buildMap() {
     M[lr][40] = mk('toilet', false, 'cell');
   }
 
+  // ── NYE ROM (rad 24–25) ─────────────────────────────────────────
+  // Isolasjon: cols 2–6
+  for (let y=24; y<=25; y++)
+    for (let x=2; x<=6; x++) M[y][x] = mk('iso_floor', true, 'isolation');
+  M[24][5] = mk('door', true, 'isolation');
+
+  // Samtalerom: cols 12–18
+  for (let y=24; y<=25; y++)
+    for (let x=12; x<=18; x++) M[y][x] = mk('counsel_floor', true, 'counseling');
+  M[24][15] = mk('door', true, 'counseling');
+
+  // Bibliotek: cols 24–32
+  for (let y=24; y<=25; y++)
+    for (let x=24; x<=32; x++) M[y][x] = mk('library_floor', true, 'library');
+  M[24][28] = mk('door', true, 'library');
+
   return M;
 }
 
@@ -553,6 +591,14 @@ const GS = {
   hoverId:    null,
   listFilter: 'all',    // 'all' | 'iso' | 'con' | 'hot'
 };
+
+const HISTORY_MAX = 8;
+function addHistory(inm, text) {
+  inm.history.unshift(text);
+  if (inm.history.length > HISTORY_MAX) inm.history.length = HISTORY_MAX;
+}
+function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
 
 // ================================================================
 // HELPERS
@@ -643,6 +689,19 @@ const SPOTS = (() => {
         px:(p.x*TILE+TILE/2), py:(p.y*TILE+TILE/2) };
     });
 
+  // Isolasjon: 6 spredte spots
+  [[3,24],[3,25],[5,25],[6,24],[6,25],[4,25]].forEach(([x,y],i) => {
+    spots[`iso_${i}`] = { id:`iso_${i}`, zone:'isolation', px:x*TILE+TILE/2, py:y*TILE+TILE/2 };
+  });
+  // Samtalerom: 5 spots
+  [[13,24],[14,25],[15,25],[16,24],[17,25]].forEach(([x,y],i) => {
+    spots[`counsel_${i}`] = { id:`counsel_${i}`, zone:'counseling', px:x*TILE+TILE/2, py:y*TILE+TILE/2 };
+  });
+  // Bibliotek: 8 spots
+  [[25,24],[26,25],[27,24],[28,25],[29,24],[30,25],[31,24],[32,25]].forEach(([x,y],i) => {
+    spots[`library_${i}`] = { id:`library_${i}`, zone:'library', px:x*TILE+TILE/2, py:y*TILE+TILE/2 };
+  });
+
   return spots;
 })();
 
@@ -663,6 +722,7 @@ function claimSpot(zone, cellDef, inmateId, subzone = null) {
     if (zone === 'cell' && s.cellId !== cellDef.id) return false;
     if (zone === 'gang') {
       const owner = GS.inmates.find(i => i.id === inmateId);
+      if (owner && !owner.groupId) return false;             // ikke i gjeng → ingen gjeng-spot
       if (owner && s.groupId !== owner.groupId) return false;
     }
     return !occupancy.has(s.id);
@@ -703,8 +763,8 @@ function claimSpot(zone, cellDef, inmateId, subzone = null) {
         if (d >= NEAR_R) continue;
         const prox = 1 - d / NEAR_R; // 0..1
         if (o.kategori === self.kategori) katBonus  += SAME_KAT_W  * prox;
-        if (o.groupId  === self.groupId)  gangBonus += SAME_GANG_W * prox;
-        else if (!isGangZone)             rivalMalus += RIVAL_W    * prox * tMul;
+        if (self.groupId && o.groupId === self.groupId) gangBonus += SAME_GANG_W * prox;
+        else if (self.groupId && o.groupId && !isGangZone) rivalMalus += RIVAL_W * prox * tMul;
         crowd += prox;
       }
       // Cap så ingen faktor dominerer fullstendig
@@ -749,6 +809,9 @@ function fallbackPos(zone, cellDef, groupId = null) {
   }
   if (zone === 'gym')       return { px: (10+rInt(0,10))*TILE+TILE/2, py: (17+rInt(0,4))*TILE+TILE/2, id: null };
   if (zone === 'shower')    return { px: (24+rInt(0,10))*TILE+TILE/2, py: (17+rInt(0,4))*TILE+TILE/2, id: null };
+  if (zone === 'isolation')  return { px: 4*TILE+TILE/2,  py: 25*TILE+TILE/2, id: null };
+  if (zone === 'counseling') return { px: 15*TILE+TILE/2, py: 25*TILE+TILE/2, id: null };
+  if (zone === 'library')    return { px: 28*TILE+TILE/2, py: 25*TILE+TILE/2, id: null };
   return { px: rInt(9,35)*TILE+TILE/2, py: rInt(12,23)*TILE+TILE/2, id: null };
 }
 
@@ -831,6 +894,18 @@ function buildPath(inmate, targetZone, destSpot = null) {
     pts.push(tp(R_INNER, shwExit));
     atRow = shwExit;
 
+  } else if (inmate.zone === 'isolation') {
+    pts.push(tp(5, 24));
+    pts.push(tp(5, CROSS_R));
+    atRow = CROSS_R;
+  } else if (inmate.zone === 'counseling') {
+    pts.push(tp(15, 24));
+    pts.push(tp(15, CROSS_R));
+    atRow = CROSS_R;
+  } else if (inmate.zone === 'library') {
+    pts.push(tp(28, 24));
+    pts.push(tp(28, CROSS_R));
+    atRow = CROSS_R;
   } else {
     // corridor — atRow already set
   }
@@ -923,6 +998,22 @@ function buildPath(inmate, targetZone, destSpot = null) {
     const sx = 29 + Math.floor(Math.random() * 5);
     pts.push(tp(sx, 17));                  // step left into shower top
     pts.push(dest);
+
+  } else if (targetZone === 'isolation') {
+    if (atRow !== CROSS_R) pts.push(tp(VERT_X, CROSS_R));
+    pts.push(tp(5, CROSS_R));
+    pts.push(tp(5, 24));
+    pts.push(dest);
+  } else if (targetZone === 'counseling') {
+    if (atRow !== CROSS_R) pts.push(tp(VERT_X, CROSS_R));
+    pts.push(tp(15, CROSS_R));
+    pts.push(tp(15, 24));
+    pts.push(dest);
+  } else if (targetZone === 'library') {
+    if (atRow !== CROSS_R) pts.push(tp(VERT_X, CROSS_R));
+    pts.push(tp(28, CROSS_R));
+    pts.push(tp(28, 24));
+    pts.push(dest);
   }
 
   return pts;
@@ -933,22 +1024,64 @@ function buildPath(inmate, targetZone, destSpot = null) {
 // ================================================================
 let UID = 1;
 const NAMES = [
+  // Norske
   'Erik Dahl','Lars Berg','Knut Vik','Ole Moe','Jan Bye','Per Rud',
   'Tor Lund','Arne Foss','Ivar Nag','Bjørn Hov','Rolf Ask','Geir Sol',
+  'Svein Holm','Kåre Ek','Odd Ruud','Trond Sæter','Magne Ro','Harald Lid',
+  'Gunnar Os','Einar Myr','Stein Bø','Helge Fure',
+  // Polske / baltiske
+  'Piotr Nowak','Tomasz Wójcik','Kamil Dąbrowski',
+  'Mindaugas Petras','Darius Kazlauskas',
+  // Somaliske / østafrikanske
+  'Ahmed Hassan','Omar Ali','Yusuf Mahamed','Hassan Abdi','Samuel Tesfay',
+  // Sør-asiatiske
+  'Amir Khan','Tariq Hussain','Rashid Malik',
+  // Midtøsten / Nord-Afrika
+  'Mohammed Saleh','Ali Rahimi','Karim Fassi',
+  // Tyrkiske / Balkan
+  'Mehmet Yilmaz','Emre Demir','Dragan Petrović','Viktor Ivanov',
 ];
+
+// Unik navn-velger: tar neste ledige fra NAMES, eller suffikser med tall hvis alle er brukt
+function pickUniqueName() {
+  const taken = new Set(GS.inmates.map(i => i.name));
+  for (const n of NAMES) {
+    if (!taken.has(n)) return n;
+  }
+  for (let k = 2; k < 100; k++) {
+    for (const n of NAMES) {
+      const cand = `${n} ${k}`;
+      if (!taken.has(cand)) return cand;
+    }
+  }
+  return `Innsatt ${GS.inmates.length + 1}`;
+}
 
 const CLOTH_COLORS = ['#c85020','#3858a0','#a02020','#607838','#703898','#a0943a'];
 const SKIN_TONES   = ['#f0c888','#d4906a','#b06838','#7c4020'];
 const HAIR_COLORS  = ['#181008','#4c3018','#787878','#b09838'];
 const KATEGORIER   = ['vold','økonomi','narkotika','tyveri','annet'];
 
+// Kvirk — én valgfri personlighetsflavor per innsatt (ca. 40% har en)
+const KVIRK_OPTS = [
+  ['none',        0.60],
+  ['paranoid',    0.08],
+  ['impulsiv',    0.08],
+  ['karismatisk', 0.08],
+  ['nervøs',      0.08],
+  ['fanatisk',    0.08],
+];
+
+// Aktivitet — settes ved fase-skifte, påvirker uro per tick
+const AKTIVITETER = ['ingen','trening','sosial','lesing','dusj','samling'];
+
 class Inmate {
   constructor(cellId) {
     this.id            = UID++;
-    this.name          = NAMES[(this.id-1) % NAMES.length];
+    this.name          = pickUniqueName();
     this.cellId        = cellId;
     this.cellSlot      = 0;
-    this.groupId       = ['A','B','C'][this.id % 3];
+    this.groupId       = Math.random() < 0.65 ? ['A','B','C'][this.id % 3] : null;
     this.zone          = 'cell';
     this.targetZone    = 'cell';
     this.waypoints     = [];
@@ -985,6 +1118,9 @@ class Inmate {
     this.sosial           = pickWeighted([['introvert',0.30],['normal',0.50],['dominant',0.20]]);
     this.stressTolerance  = pickWeighted([['low',0.25],['medium',0.50],['high',0.25]]);
     this.isolationResponse = pickWeighted([['positive',0.30],['neutral',0.50],['negative',0.20]]);
+    this.kvirk            = pickWeighted(KVIRK_OPTS);   // 'none'|'paranoid'|'impulsiv'|'karismatisk'|'nervøs'|'fanatisk'
+    this.idolId           = null;                        // kun fanatisk: ID til karismatisk idol
+    this.aktivitet        = 'ingen';                     // settes ved fase-skifte
 
     // Conflict state
     this.inConflict       = false;
@@ -993,6 +1129,27 @@ class Inmate {
     this.conflictCount    = 0;    // teller konflikter siden siste isolat-slutt
     this.isolationTicks   = 0;    // gjenværende isolat-tid i ticks (0 = fri)
     this.isolatCount      = 0;    // totalt antall ganger i isolat
+
+    // Fight state (v0.9.1 kamp-logikk)
+    this.strength         = 40 + Math.random() * 40;   // 40–80
+    this.inFight          = false;
+    this.fightMs          = 0;     // gjenværende kamp-varighet
+    this.fightOpponent    = null;  // id til motstander
+
+    // Rom-opphold etter kamp: hvilken type sone vi er i
+    // 'isolation' | 'counseling' | 'library' | null
+    this.postFightRoom    = null;
+
+    // Personlig historikk — korte hendelser, nyeste først
+    this.history          = [];
+
+    // Relasjoner (v0.9.4)
+    this.friendId              = null;
+    this.notifiedFriendInRoom  = null;  // dedupe: lagrer friendId siste gang historikk ble logget for "venn i rom"
+
+    // Frivillige biblioteksbesøk (v0.9.6) — teller kun opp når inm har gått dit av eget valg
+    this.libraryVisits  = 0;
+    this._wasInLibrary  = false;
 
     // Starting position
     const def = getCellDef(cellId);
@@ -1034,12 +1191,15 @@ class Inmate {
     const tile = GS.map[ty]?.[tx];
     if (tile) {
       const z = tile.zone;
-      if      (z === 'cell'      ) this.zone = 'cell';
-      else if (z === 'cafeteria' ) this.zone = 'cafeteria';
-      else if (z === 'yard'      ) this.zone = 'yard';
-      else if (z === 'gym'       ) this.zone = 'gym';
-      else if (z === 'shower'    ) this.zone = 'shower';
-      else                         this.zone = 'corridor';
+      if      (z === 'cell'       ) this.zone = 'cell';
+      else if (z === 'cafeteria'  ) this.zone = 'cafeteria';
+      else if (z === 'yard'       ) this.zone = 'yard';
+      else if (z === 'gym'        ) this.zone = 'gym';
+      else if (z === 'shower'     ) this.zone = 'shower';
+      else if (z === 'isolation'  ) this.zone = 'isolation';
+      else if (z === 'counseling' ) this.zone = 'counseling';
+      else if (z === 'library'    ) this.zone = 'library';
+      else                          this.zone = 'corridor';
     }
     this.targetZone  = zone;
     this.pendingZone = null;
@@ -1079,6 +1239,9 @@ class Inmate {
       }
       return;
     }
+
+    // Stopp bevegelse under kamp — de står og slåss
+    if (this.inFight) return;
 
     if (this.waypoints.length === 0) {
       // Cafeteria sub-state machine
@@ -1157,14 +1320,16 @@ class Guard {
     // Periodically scan for high-unrest target
     this.scanTimer -= dt;
     if (this.scanTimer <= 0 && !this.target) {
-      this.scanTimer = 2000;
+      // Adaptiv scan-rate: dobler tempo ved høy uro i fengselet
+      const anyHigh = GS.inmates.some(i => i.unrest > 70);
+      this.scanTimer = anyHigh ? 1000 : 2000;
       let best = null, bestScore = -1;
       for (const inm of GS.inmates) {
         if (!inm.inConflict && inm.unrest < 78) continue;   // konflikt → alltid kandidat
         const dx = inm.px - this.px, dy = inm.py - this.py;
         const d = Math.sqrt(dx*dx + dy*dy);
         if (d < TILE * 10) {
-          const base = inm.inConflict ? inm.unrest + 30 : inm.unrest; // konflikt → prioritet
+          const base = inm.inConflict ? inm.unrest + 60 : inm.unrest; // konflikt-pri styrket
           const score = base - d * 0.05;
           if (score > bestScore) { best = inm; bestScore = score; }
         }
@@ -1185,6 +1350,8 @@ class Guard {
           this.target.isBeingIntervened = true;
           this.target.waypoints = [];
           this.target.unrest = Math.max(0, this.target.unrest - 2.5);
+          // Vakt avbryter pågående kamp — la resolve trigge neste tick
+          if (this.target.inFight) this.target.fightMs = Math.min(this.target.fightMs, 200);
           this.interventionTimer += dt;
           if (this.interventionTimer >= 4000) {
             this.target.isBeingIntervened = false;
@@ -1207,6 +1374,25 @@ class Guard {
     const d  = Math.sqrt(dx*dx + dy*dy);
     if (d < 3) {
       this.pi = (this.pi + 1) % this.patrol.length;
+      // Smartere patrulje: når vi runder, sikt mot waypoint nærmest høyeste-uro-innsatt (hvis uro > 55)
+      if (this.pi === 0) {
+        let hotInm = null, hotUnrest = 55;
+        for (const inm of GS.inmates) {
+          if (inm.unrest > hotUnrest && inm.isolationTicks === 0 && inm.zone !== 'cell') {
+            hotUnrest = inm.unrest; hotInm = inm;
+          }
+        }
+        if (hotInm) {
+          let bestI = 0, bestD = Infinity;
+          for (let i = 0; i < this.patrol.length; i++) {
+            const wx = this.patrol[i].x*TILE + TILE/2;
+            const wy = this.patrol[i].y*TILE + TILE/2;
+            const wd = Math.hypot(wx - hotInm.px, wy - hotInm.py);
+            if (wd < bestD) { bestD = wd; bestI = i; }
+          }
+          this.pi = bestI;
+        }
+      }
     } else {
       const spd = this.speed * dt * 0.054;
       this.px += dx/d * spd;
@@ -1238,16 +1424,25 @@ function spawn() {
   GS.guards.push(new Guard([{x:21,y:6},{x:8,y:6},{x:21,y:6},{x:21,y:2},{x:21,y:6},{x:34,y:6}]));
   // Guard 4: vertical spine + gym/shower observer (panoptikon guard)
   GS.guards.push(new Guard([{x:21,y:12},{x:21,y:5},{x:21,y:12},{x:21,y:19},{x:21,y:12}]));
+
+  assignIdols();
+}
+
+// Fanatiske får en karismatisk idol etter spawn. Null hvis ingen karismatisk eksisterer.
+function assignIdols() {
+  const karismatiske = GS.inmates.filter(i => i.kvirk === 'karismatisk');
+  for (const inm of GS.inmates) {
+    if (inm.kvirk !== 'fanatisk') continue;
+    if (karismatiske.length === 0) { inm.idolId = null; continue; }
+    inm.idolId = karismatiske[Math.floor(Math.random()*karismatiske.length)].id;
+  }
 }
 
 // ================================================================
 // CONFLICT MECHANIC
 // ================================================================
 const CONFLICT_DIST       = TILE * 1.5;   // rivaler trenger ikke være helt inntil
-const HEALTH_DAMAGE_MIN   = 3;
-const HEALTH_DAMAGE_MAX   = 7;
 const HEALTH_FLOOR        = 20;           // v1: ingen død — helse stopper her
-const UNREST_BOOST        = 12;
 const CONFLICT_COOLDOWN   = 12000;        // 12s før samme innsatt kan igjen
 const FLASH_DURATION      = 1800;         // 1.8s visuell markør
 
@@ -1256,38 +1451,161 @@ const STRESS_THRESHOLD = { low: 35, medium: 50, high: 65 };
 // temperament → sjanse for å TRIGGE når alle andre krav er møtt
 const AGGRESSION_ROLL  = { calm: 0.10, normal: 0.45, aggressive: 0.80 };
 
-// Isolat: konsekvens av gjentatte konflikter
-const ISOLATION_THRESHOLD = 3;                                     // konflikter før isolat
-const ISOLATION_DURATION  = 1020;                                  // én full døgnsyklus i ticks
-const ISO_UNREST_DELTA    = { positive: -1.0, neutral: -0.5, negative: +0.2 };
+// Rom-opphold: konsekvens av gjentatte konflikter. Innsatt "velger" ett av tre rom.
+const ISOLATION_THRESHOLD = 3;                                     // konflikter før rom-ruting
+const ROOM_DURATION = {
+  isolation:  1020,   // full døgnsyklus — straff
+  counseling:  340,   // ~1 fase
+  library:     680,   // ~2 faser, roligere
+};
 
-function sendToIsolation(inm) {
-  inm.isolationTicks     = ISOLATION_DURATION;
-  inm.conflictCount      = 0;
-  inm.isolatCount++;                    // total historikk
-  inm.soningstidIgjen   += 1;           // +1 dag til avsoning
-  inm.soningstidTotalt  += 1;           // hold sentPct konsistent
-  inm.waypoints          = [];
-  inm.targetZone         = 'cell';
-  inm.pendingZone        = null;
-  releaseSpot(inm.id);
-  inm._applyZoneChange('cell');
+// Weighted random basert på personlighet + uro
+function chooseRoomAfterFight(inm) {
+  const w = { isolation: 1.0, counseling: 1.0, library: 1.0 };
+
+  if (inm.unrest > 70) w.isolation *= 2.0;
+  if (inm.unrest > 85) w.isolation *= 1.5;
+
+  if (inm.kvirk === 'nervøs')       { w.counseling *= 2.5; w.isolation  *= 0.7; }
+  if (inm.kvirk === 'karismatisk')  { w.isolation  *= 0.4; w.library    *= 1.3; }
+  if (inm.kvirk === 'paranoid')     { w.counseling *= 0.4; w.library    *= 1.3; }
+  if (inm.kvirk === 'fanatisk')     { w.counseling *= 0.6; }
+
+  if (inm.stressTolerance === 'low')    w.counseling *= 2.0;
+  if (inm.temperament   === 'calm')     w.library    *= 1.8;
+  if (inm.temperament   === 'aggressive'){ w.isolation *= 1.4; w.library *= 0.5; }
+  if (inm.sosial        === 'introvert') w.library    *= 1.4;
+  if (inm.health        < 50)            w.counseling *= 1.4;
+
+  const total = w.isolation + w.counseling + w.library;
+  let r = Math.random() * total;
+  if ((r -= w.isolation)  <= 0) return 'isolation';
+  if ((r -= w.counseling) <= 0) return 'counseling';
+  return 'library';
 }
 
+function sendToRoomAfterFight(inm) {
+  if (inm.isolationTicks > 0) return;      // allerede på opphold
+  const room = chooseRoomAfterFight(inm);
+  inm.postFightRoom      = room;
+  inm.isolationTicks     = ROOM_DURATION[room];
+  inm.conflictCount      = 0;
+  if (room === 'isolation') {
+    inm.isolatCount++;
+    inm.soningstidIgjen  += 1;
+    inm.soningstidTotalt += 1;
+  }
+  inm.waypoints   = [];
+  inm.pendingZone = null;
+  releaseSpot(inm.id);
+  inm.setTargetZone(room);
+  addHistory(inm,
+    room === 'isolation'  ? 'Sendt til isolat' :
+    room === 'counseling' ? 'Sendt til samtale' :
+                            'Sendt til biblioteket');
+}
+
+const HISTORY_ROOM_LINES = {
+  isolation:  { pos: ['Kom rolig ut av isolatet', 'Roet seg i isolatet'],
+                neg: ['Kom verre ut av isolatet', 'Brøt ned i isolatet'] },
+  counseling: { pos: ['Roet seg i samtalen', 'Åpnet seg i samtalen'],
+                neg: ['Samtalen hjalp ikke', 'Sa ingenting i samtalen'] },
+  library:    { pos: ['Fant ro i biblioteket', 'Roet seg blant bøkene'],
+                neg: ['Rastløs i biblioteket', 'Fant ikke ro blant bøkene'] },
+};
+
+// Ferdig-effekt: kalles når timeren går til 0
+function applyRoomEffect(inm) {
+  const room = inm.postFightRoom;
+  if (!room) return;
+  let d = 0, neg = false;
+
+  if (room === 'isolation') {
+    d = -25;
+    if (inm.isolationResponse === 'positive')      d -= 10;
+    else if (inm.isolationResponse === 'negative') { d = 15; neg = true; }
+    if (inm.kvirk === 'nervøs') { d += 10; if (d > 0) neg = true; }
+    if (inm.kvirk === 'fanatisk') {
+      const idol = GS.inmates.find(x => x.id === inm.idolId);
+      if (!idol || idol.isolationTicks > 0) { d += 8; if (d > -5) neg = true; }
+    }
+    addHistory(inm, pickRandom(HISTORY_ROOM_LINES.isolation[neg ? 'neg' : 'pos']));
+  } else if (room === 'counseling') {
+    d = -12;
+    if (inm.kvirk          === 'nervøs')      d -= 10;
+    if (inm.stressTolerance === 'low')        d -= 6;
+    if (inm.temperament    === 'aggressive') { d += 4; neg = true; }
+    if (inm.kvirk          === 'paranoid')   { d += 3; neg = true; }
+    addHistory(inm, pickRandom(HISTORY_ROOM_LINES.counseling[neg ? 'neg' : 'pos']));
+  } else if (room === 'library') {
+    d = -8;
+    if (inm.temperament === 'calm' || inm.sosial === 'introvert') d -= 5;
+    if (inm.temperament === 'aggressive') { d += 2; neg = true; }
+    inm.disiplin = Math.min(100, inm.disiplin + 3);
+    addHistory(inm, pickRandom(HISTORY_ROOM_LINES.library[neg ? 'neg' : 'pos']));
+  }
+
+  inm.unrest = Math.max(0, Math.min(100, inm.unrest + d));
+  inm.postFightRoom = null;
+}
+
+// Kamp-varighet: 3.5–5s så spilleren rekker å se den
+const FIGHT_MS_MIN = 3500;
+const FIGHT_MS_MAX = 5000;
+
 function triggerConflict(a, b) {
-  const dmgA = HEALTH_DAMAGE_MIN + Math.random() * (HEALTH_DAMAGE_MAX - HEALTH_DAMAGE_MIN);
-  const dmgB = HEALTH_DAMAGE_MIN + Math.random() * (HEALTH_DAMAGE_MAX - HEALTH_DAMAGE_MIN);
-  a.health = Math.max(HEALTH_FLOOR, a.health - dmgA);
-  b.health = Math.max(HEALTH_FLOOR, b.health - dmgB);
-  a.unrest = Math.min(100, a.unrest + UNREST_BOOST);
-  b.unrest = Math.min(100, b.unrest + UNREST_BOOST);
+  // Start kamp — skade/utfall bestemmes i resolveFight når timeren er ute
+  const dur = FIGHT_MS_MIN + Math.random() * (FIGHT_MS_MAX - FIGHT_MS_MIN);
+  a.inFight = b.inFight = true;
+  a.fightMs = b.fightMs = dur;
+  a.fightOpponent = b.id;
+  b.fightOpponent = a.id;
+  a.waypoints = [];
+  b.waypoints = [];
   a.inConflict = b.inConflict = true;
   a.conflictFlashMs = b.conflictFlashMs = FLASH_DURATION;
-  a.conflictCooldown = b.conflictCooldown = CONFLICT_COOLDOWN;
+  a.conflictCooldown = a.kvirk === 'impulsiv' ? CONFLICT_COOLDOWN/2 : CONFLICT_COOLDOWN;
+  b.conflictCooldown = b.kvirk === 'impulsiv' ? CONFLICT_COOLDOWN/2 : CONFLICT_COOLDOWN;
   a.conflictCount++;
   b.conflictCount++;
-  if (a.conflictCount >= ISOLATION_THRESHOLD) sendToIsolation(a);
-  if (b.conflictCount >= ISOLATION_THRESHOLD) sendToIsolation(b);
+  // Isolat-sjekk er flyttet til resolveFight — applies etter at kampen er over
+}
+
+function resolveFight(a, b) {
+  // Vinner = høyere (strength + tilfeldig 0–20)
+  const scoreA = a.strength + Math.random() * 20;
+  const scoreB = b.strength + Math.random() * 20;
+  const winner = scoreA >= scoreB ? a : b;
+  const loser  = winner === a ? b : a;
+
+  // Taper: helseskade + uro opp
+  const dmg = 8 + Math.random() * 7;   // 8–15
+  loser.health = Math.max(HEALTH_FLOOR, loser.health - dmg);
+  loser.unrest = Math.min(100, loser.unrest + 15);
+
+  // Vinner: litt lavere uro, ingen skade
+  winner.unrest = Math.max(0, winner.unrest - 5);
+
+  // Rydd opp kamp-flagg på begge
+  a.inFight = b.inFight = false;
+  a.fightMs = b.fightMs = 0;
+  a.fightOpponent = b.fightOpponent = null;
+
+  // Historikk — kort hendelse per innsatt
+  addHistory(winner, pickRandom([
+    `Vant kamp mot ${loser.name}`,
+    `Banka ${loser.name}`,
+    `Ble stående — ${loser.name} gikk ned`,
+  ]));
+  addHistory(loser, pickRandom([
+    `Tapte mot ${winner.name}`,
+    `Ble slått ned av ${winner.name}`,
+    `Kom dårlig ut mot ${winner.name}`,
+  ]));
+
+  // Rom-ruting hvis de har nådd terskel (innsatt "velger" isolation/counseling/library)
+  if (a.conflictCount >= ISOLATION_THRESHOLD) sendToRoomAfterFight(a);
+  if (b.conflictCount >= ISOLATION_THRESHOLD) sendToRoomAfterFight(b);
 }
 
 function runConflictCheck() {
@@ -1296,7 +1614,12 @@ function runConflictCheck() {
     const a = GS.inmates[i];
     if (a.isolationTicks > 0) continue;
     if (a.conflictCooldown > 0) continue;
-    if (a.unrest < STRESS_THRESHOLD[a.stressTolerance]) continue;
+    let aThresh = STRESS_THRESHOLD[a.stressTolerance];
+    if (a.kvirk === 'fanatisk' && a.idolId != null) {
+      const aIdol = GS.inmates.find(x => x.id === a.idolId);
+      if (aIdol && aIdol.inConflict) aThresh -= 15;
+    }
+    if (a.unrest < aThresh) continue;
     if (a.isBeingIntervened) continue;
     if (a.zone === 'cell') continue;
 
@@ -1304,8 +1627,14 @@ function runConflictCheck() {
       const b = GS.inmates[j];
       if (b.isolationTicks > 0) continue;
       if (b.conflictCooldown > 0) continue;
-      if (b.groupId === a.groupId) continue;                    // rivaler = annen gjeng
-      if (b.unrest < STRESS_THRESHOLD[b.stressTolerance]) continue;
+      if (a.groupId && b.groupId === a.groupId) continue;       // rivaler = annen gjeng (skippes kun for gjeng-medlem-par)
+      if (b.id === a.friendId) continue;                        // ikke angrip venn
+      let bThresh = STRESS_THRESHOLD[b.stressTolerance];
+      if (b.kvirk === 'fanatisk' && b.idolId != null) {
+        const bIdol = GS.inmates.find(x => x.id === b.idolId);
+        if (bIdol && bIdol.inConflict) bThresh -= 15;
+      }
+      if (b.unrest < bThresh) continue;
       if (b.isBeingIntervened) continue;
       if (b.zone === 'cell') continue;
 
@@ -1329,6 +1658,76 @@ function runConflictCheck() {
 const TICK_MS = 900;
 let tickTimer = 0;
 let conflictCounter = 0;
+let friendCounter   = 0;
+
+// ── Venn-dannelse (v0.9.4) ──────────────────────────────────────────────
+function computeFriendWeight(a, b) {
+  let w = 0.003;
+  if (a.groupId && b.groupId) w *= (a.groupId === b.groupId ? 3.0 : 0.25);
+  // Personlighet — a sin side påvirker mest (b regnes symmetrisk over to ticks)
+  if (a.kvirk === 'karismatisk' || a.temperament === 'calm')       w *= 1.5;
+  if (a.kvirk === 'fanatisk'    || a.temperament === 'aggressive') w *= 0.15;
+  if (a.kvirk === 'nervøs')                                         w *= 0.7;
+  return w;
+}
+
+function runFriendFormation() {
+  const FRIEND_DIST = TILE * 2;
+  for (const a of GS.inmates) {
+    if (a.friendId != null) continue;
+    if (a.inFight || a.inConflict) continue;
+    if (a.isolationTicks > 0 || a.postFightRoom) continue;
+    if (a.zone === 'cell') continue;
+    // Finn nærmeste kvalifiserte kandidat
+    for (const b of GS.inmates) {
+      if (b === a) continue;
+      if (b.friendId != null) continue;
+      if (b.inFight || b.inConflict) continue;
+      if (b.isolationTicks > 0 || b.postFightRoom) continue;
+      const d = Math.hypot(a.px - b.px, a.py - b.py);
+      if (d > FRIEND_DIST) continue;
+      const w = computeFriendWeight(a, b);
+      if (Math.random() < w) {
+        a.friendId = b.id;
+        b.friendId = a.id;
+        addHistory(a, `Ble venn med ${b.name}`);
+        addHistory(b, `Ble venn med ${a.name}`);
+        break;
+      }
+    }
+  }
+}
+
+// Teller frivillige og påbegynte biblioteksbesøk; begrenser til antall spots (8)
+function libraryHasSpot() {
+  const used = GS.inmates.filter(i =>
+    i.zone === 'library' || i.targetZone === 'library'
+  ).length;
+  return used < 8;
+}
+
+// Velger aktivitet per fase — enkel prioritering på temperament/sosial/stress
+function chooseActivity(inm, phase) {
+  if (phase === 'Natt') return 'ingen';
+  if (phase === 'Kveld' && inm.hygiene < 50) return 'dusj';
+  const wantsToRead =
+    inm.temperament !== 'aggressive' &&
+    inm.kvirk !== 'fanatisk' &&
+    (inm.sosial === 'introvert' ||
+     inm.stressTolerance === 'low' ||
+     inm.kvirk === 'nervøs' ||
+     inm.kvirk === 'paranoid');
+  if (phase === 'Formiddag') {
+    if (inm.temperament === 'aggressive' || inm.energi > 70) return 'trening';
+    if (wantsToRead) return 'lesing';
+    return 'sosial';
+  }
+  if (phase === 'Ettermiddag') {
+    if (wantsToRead) return 'lesing';
+    return 'sosial';
+  }
+  return 'ingen';
+}
 
 function tick() {
   // Advance phase
@@ -1350,11 +1749,32 @@ function tick() {
         }
       }
     }
-    const newZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
+    // Aktivitet først — den styrer bibliotek-overstyringen i sone-valget under
+    const newPhase = PHASES[GS.phaseIndex];
+    for (const inm of GS.inmates) {
+      inm.aktivitet = chooseActivity(inm, newPhase);
+    }
+    const defaultZone = PHASE_ZONE[newPhase];
     for (let i = 0; i < GS.inmates.length; i++) {
       if (GS.inmates[i].isolationTicks > 0) continue;
+      let targetZone = defaultZone;
+      if (GS.inmates[i].aktivitet === 'lesing' && libraryHasSpot()) {
+        targetZone = 'library';
+      }
       const delay = i * 350 + Math.random() * 200;
-      GS.inmates[i].setTargetZone(newZone, delay);
+      GS.inmates[i].setTargetZone(targetZone, delay);
+    }
+    // Ritual / Samling: i Ettermiddag, hvis en karismatisk er fri, samles hun og fanatiske i samme sone
+    if (newPhase === 'Ettermiddag') {
+      const kari = GS.inmates.find(i => i.kvirk === 'karismatisk' && i.isolationTicks === 0);
+      if (kari) {
+        const samlingZone = kari.targetZone;
+        for (const inm of GS.inmates) {
+          if (inm === kari || (inm.kvirk === 'fanatisk' && inm.targetZone === samlingZone)) {
+            inm.aktivitet = 'samling';
+          }
+        }
+      }
     }
   }
 
@@ -1371,39 +1791,114 @@ function tick() {
       const factor = NIGHT_BASE[inm.isolationResponse] * NIGHT_TEMP[inm.temperament];
       delta = factor * inm.unrest;
     } else {
+      let nearbyCount = 0;
       for (const other of GS.inmates) {
         if (other === inm) continue;
         const dx = other.px - inm.px, dy = other.py - inm.py;
         const d = Math.sqrt(dx*dx + dy*dy);
         if (d < TILE*3) {
+          nearbyCount++;
           const prox = 1 - d/(TILE*3);
           // Same category → less tension; different → more
           const factor = other.kategori === inm.kategori ? 0.15 : 0.45;
           delta += factor * prox;
-          // Same gang → calming; different gang → tension
-          const gangFactor = other.groupId === inm.groupId ? -0.10 : 0.55;
-          delta += gangFactor * prox;
+          // Same gang → calming; different gang → tension; non-gang eller blandet → nøytral
+          if (inm.groupId && other.groupId) {
+            const gangFactor = other.groupId === inm.groupId ? -0.10 : 0.55;
+            delta += gangFactor * prox;
+          }
+          // Venn nær → beroligende
+          if (inm.friendId && other.id === inm.friendId) delta -= 0.15 * prox;
           // Sosial-trait: introvert irriteres av crowd, dominant nyter selskap
           if (inm.sosial === 'introvert') delta += 0.10 * prox;
           else if (inm.sosial === 'dominant') delta -= 0.05 * prox;
+          // Karismatisk smitter ro på naboer
+          if (other.kvirk === 'karismatisk') delta -= 0.08 * prox;
+          // Samling-smitte: utenforstående i samme sone som samling blir ukomfortable
+          if (inm.aktivitet !== 'samling' && other.aktivitet === 'samling') delta += 0.08 * prox;
         }
       }
+      // Paranoid — overfylt sone føles truende
+      if (inm.kvirk === 'paranoid' && nearbyCount >= 3) delta += 0.15;
       for (const g of GS.guards) {
         const dx = g.px - inm.px, dy = g.py - inm.py;
         const d = Math.sqrt(dx*dx + dy*dy);
-        if (d < TILE*5) delta -= 1.1 * (1 - d/(TILE*5));
+        if (d < TILE*5) {
+          // Differensiert vakt-reaksjon: nervøs trigges, andre roes ulikt
+          let guardFactor = -1.1;
+          if (inm.kvirk === 'nervøs')            guardFactor = +0.6;
+          else if (inm.kvirk === 'fanatisk')     guardFactor = -0.3;
+          else if (inm.kvirk === 'karismatisk')  guardFactor = -0.5;
+          else if (inm.kvirk === 'paranoid')     guardFactor = -0.4;
+          delta += guardFactor * (1 - d/(TILE*5));
+        }
       }
       // stressTolerance forsterker/demper samlet reaksjon på nærhet
       const STRESS_MUL = { low: 1.25, medium: 1.0, high: 0.80 };
       delta *= STRESS_MUL[inm.stressTolerance];
+      // Impulsiv — uro-svingninger forsterket
+      if (inm.kvirk === 'impulsiv') delta *= 1.20;
       // Temperament-basert baseline: aggressive drifter naturlig mot høyere unrest
       const BASELINE = { calm: 15, normal: 22, aggressive: 35 };
       delta += (BASELINE[inm.temperament] - inm.unrest) * 0.012;
+      // Fanatisk — bundet til idol
+      if (inm.kvirk === 'fanatisk' && inm.idolId != null) {
+        const idol = GS.inmates.find(x => x.id === inm.idolId);
+        if (idol) {
+          if (idol.isolationTicks > 0) {
+            delta += 0.25;                          // panikk når idol er låst inne
+          } else {
+            const dIx = idol.px - inm.px, dIy = idol.py - inm.py;
+            const dI  = Math.sqrt(dIx*dIx + dIy*dIy);
+            if (dI < TILE*4) delta -= 0.12;         // trygghet nær idol
+          }
+        }
+      }
+      // Aktivitets-effekt
+      switch (inm.aktivitet) {
+        case 'trening':  delta -= 0.30; inm.energi = Math.max(0, inm.energi - 0.5); break;
+        case 'sosial':   delta -= 0.15; break;
+        case 'lesing':   delta -= 0.40; break;
+        case 'dusj':     delta += 0.10; break;
+        case 'samling':  delta -= 0.20; break;
+      }
+      // Relasjons-effekter (v0.9.4)
+      if (inm.friendId != null) {
+        const friend = GS.inmates.find(x => x.id === inm.friendId);
+        if (friend) {
+          // Venn i rom etter kamp eller isolat → litt uro + historikk én gang per hendelse
+          if (friend.postFightRoom || friend.isolationTicks > 0) {
+            delta += 0.25;
+            if (inm.notifiedFriendInRoom !== friend.id) {
+              inm.notifiedFriendInRoom = friend.id;
+              const roomTxt = friend.postFightRoom === 'counseling' ? 'på samtale'
+                            : friend.postFightRoom === 'library'    ? 'i biblioteket'
+                            : 'i isolat';
+              addHistory(inm, `Ble urolig da ${friend.name} havnet ${roomTxt}`);
+            }
+          } else if (inm.notifiedFriendInRoom === friend.id) {
+            inm.notifiedFriendInRoom = null;   // resett når vennen er fri igjen
+          }
+          // Venn i annen gjeng → små indre konflikt
+          if (inm.groupId && friend.groupId && inm.groupId !== friend.groupId) {
+            delta += 0.10;
+          }
+        } else {
+          // Venn er borte (løslatt) — rydd opp
+          inm.friendId = null;
+          inm.notifiedFriendInRoom = null;
+        }
+      }
     }
-    // Isolat overstyrer alt annet — egen modus med trait-avhengig utvikling
+    // Rom-opphold overstyrer alt — uro fryses under oppholdet,
+    // og stor effekt trigges ved utskrivning (applyRoomEffect)
     if (inm.isolationTicks > 0) {
-      delta = ISO_UNREST_DELTA[inm.isolationResponse];
+      delta = 0;
       inm.isolationTicks -= GS.speed;
+      if (inm.isolationTicks <= 0) {
+        inm.isolationTicks = 0;
+        applyRoomEffect(inm);
+      }
     }
     inm.unrest = Math.max(0, Math.min(100, inm.unrest + delta));
 
@@ -1428,10 +1923,41 @@ function tick() {
       inm.conflictFlashMs = Math.max(0, inm.conflictFlashMs - TICK_MS);
       if (inm.conflictFlashMs === 0) inm.inConflict = false;
     }
+    // kamp-timer: kun siden med lavere id kjører resolve for å unngå dobbel
+    if (inm.fightMs > 0) {
+      inm.fightMs = Math.max(0, inm.fightMs - TICK_MS);
+      if (inm.fightMs === 0 && inm.inFight) {
+        const opp = GS.inmates.find(x => x.id === inm.fightOpponent);
+        if (opp && inm.id < opp.id) {
+          resolveFight(inm, opp);
+        } else if (!opp) {
+          // motstander borte (fx sendt til isolat fra annet sted) — bare rydd opp
+          inm.inFight = false;
+          inm.fightOpponent = null;
+        }
+      }
+    }
   }
 
   // Konflikt-sjekk hver 10. tick (~9s)
   if (++conflictCounter >= 10) { conflictCounter = 0; runConflictCheck(); }
+
+  // Venn-dannelse hver 10. tick (deler teller med konflikt-sjekken ville gjort det uregelmessig;
+  // bruker egen teller for klarhet)
+  if (++friendCounter >= 10) { friendCounter = 0; runFriendFormation(); }
+
+  // Tell frivillige biblioteksbesøk (kant-detektor ved ankomst, ignorer post-fight-opphold)
+  for (const inm of GS.inmates) {
+    if (inm.zone !== 'library') {
+      inm._wasInLibrary = false;
+      continue;
+    }
+    if (!inm._wasInLibrary && inm.postFightRoom === null) {
+      inm.libraryVisits++;
+    }
+    // Setter flagget uansett — hindrer falsk økning når post-fight-halen slipper postFightRoom
+    inm._wasInLibrary = true;
+  }
 
   GS.totalUnrest = GS.inmates.length
     ? GS.inmates.reduce((s,i) => s+i.unrest, 0) / GS.inmates.length
@@ -1453,6 +1979,7 @@ const ZONE_LBL = {
   cell:'Celle', cafeteria:'Kantine', yard:'Utegård',
   corridor:'Korridor', center:'Korridor',
   gym:'Treningsrom', shower:'Dusj',
+  isolation:'Isolat', counseling:'Samtalerom', library:'Bibliotek',
 };
 
 /// Cell regions: [leftCol, topRow, widthTiles, heightTiles] for each of the 8 cells
@@ -1490,6 +2017,9 @@ function renderLabels() {
   ctx.fillText('DUSJ',    29*TILE,   19*TILE);
   ctx.fillText('CELLE',   4.5*TILE,  16*TILE);
   ctx.fillText('CELLE',   39.5*TILE, 16*TILE);
+  ctx.fillText('ISOLAT',     4.5*TILE,  24.5*TILE);
+  ctx.fillText('SAMTALE',   15.5*TILE,  24.5*TILE);
+  ctx.fillText('BIBLIOTEK', 28.5*TILE,  24.5*TILE);
   ctx.restore();
 }
 
@@ -1497,6 +2027,15 @@ const GANG_COLOR = { A: '#c83030', B: '#2858c8', C: '#28a040' };
 
 function renderInmates() {
   for (const inm of GS.inmates) {
+    // Gjeng-highlight: dim innsatte som ikke matcher aktivt filter.
+    // Valgt innsatt dimmes aldri — den må alltid være tydelig.
+    const dimmed     = GS.listFilter !== 'all'
+                    && inm.id !== GS.selectedId
+                    && !matchesFilter(inm, GS.listFilter);
+    const highlighted = GS.listFilter !== 'all'
+                    && matchesFilter(inm, GS.listFilter);
+    if (dimmed) { ctx.save(); ctx.globalAlpha = 0.18; }
+
     const { look } = inm;
     const base = TILE * 0.29 * look.sizeFactor;
     const br   = base * 0.56;   // body radius
@@ -1504,13 +2043,30 @@ function renderInmates() {
     const bx   = inm.px, by = inm.py + base * 0.18;   // body centre
     const hx   = inm.px, hy = inm.py - base * 0.44;   // head centre
     const gangColor = GANG_COLOR[inm.groupId] || '#888';
+    const inGang = inm.groupId != null;
 
-    // Gang glow — behind everything
-    ctx.save();
-    ctx.globalAlpha = 0.13;
-    ctx.fillStyle = gangColor;
-    ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 3.5, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
+    // Highlight-ring for matchende innsatte når et gjeng-filter er aktivt.
+    // Tegnes først, havner bak alt annet. Bruker gjeng-farge (eller nøytralt grå for "Ingen").
+    if (highlighted) {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = gangColor;
+      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 6, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = gangColor;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 6, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+
+    // Gang glow — kun for gjeng-medlemmer
+    if (inGang) {
+      ctx.save();
+      ctx.globalAlpha = 0.13;
+      ctx.fillStyle = gangColor;
+      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 3.5, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
 
     // Hover ring
     if (inm.id === GS.hoverId && inm.id !== GS.selectedId) {
@@ -1528,18 +2084,20 @@ function renderInmates() {
     ctx.fillStyle = look.clothColor;
     ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
 
-    // Gang chest symbol — on top of body, behind head
-    ctx.save();
-    ctx.fillStyle = gangColor; ctx.globalAlpha = 0.82;
-    const ss = br * 0.48;
-    if (inm.groupId === 'A') {
-      ctx.beginPath(); ctx.moveTo(bx, by-ss); ctx.lineTo(bx+ss*0.85, by+ss*0.5); ctx.lineTo(bx-ss*0.85, by+ss*0.5); ctx.closePath(); ctx.fill();
-    } else if (inm.groupId === 'B') {
-      ctx.beginPath(); ctx.arc(bx, by, ss*0.6, 0, Math.PI*2); ctx.fill();
-    } else {
-      ctx.fillRect(bx-ss*0.6, by-ss*0.6, ss*1.2, ss*1.2);
+    // Gang chest symbol — kun for gjeng-medlemmer
+    if (inGang) {
+      ctx.save();
+      ctx.fillStyle = gangColor; ctx.globalAlpha = 0.82;
+      const ss = br * 0.48;
+      if (inm.groupId === 'A') {
+        ctx.beginPath(); ctx.moveTo(bx, by-ss); ctx.lineTo(bx+ss*0.85, by+ss*0.5); ctx.lineTo(bx-ss*0.85, by+ss*0.5); ctx.closePath(); ctx.fill();
+      } else if (inm.groupId === 'B') {
+        ctx.beginPath(); ctx.arc(bx, by, ss*0.6, 0, Math.PI*2); ctx.fill();
+      } else if (inm.groupId === 'C') {
+        ctx.fillRect(bx-ss*0.6, by-ss*0.6, ss*1.2, ss*1.2);
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     // Head (skin tone)
     ctx.fillStyle = look.skinTone;
@@ -1569,11 +2127,13 @@ function renderInmates() {
       ctx.restore();
     }
 
-    // Gang bandana — stripe across head, over hair
-    ctx.save();
-    ctx.fillStyle = gangColor; ctx.globalAlpha = 0.70;
-    ctx.fillRect(hx - hr*1.05, hy - hr*0.18, hr*2.1, 2);
-    ctx.restore();
+    // Gang bandana — kun for gjeng-medlemmer
+    if (inGang) {
+      ctx.save();
+      ctx.fillStyle = gangColor; ctx.globalAlpha = 0.70;
+      ctx.fillRect(hx - hr*1.05, hy - hr*0.18, hr*2.1, 2);
+      ctx.restore();
+    }
 
     // Shower effect — animated water droplets above head
     if (inm.zone === 'shower') {
@@ -1592,13 +2152,31 @@ function renderInmates() {
     ctx.fillStyle = uc;
     ctx.beginPath(); ctx.arc(inm.px + base*0.55, inm.py - base*0.62, 2.5, 0, Math.PI*2); ctx.fill();
 
-    // Status-emoji over hodet — isolat > konflikt > høy uro
+    // Status-emoji over hodet — rom-opphold > kamp > konflikt-flash > høy uro
     if (inm.isolationTicks > 0) {
+      const icon = inm.postFightRoom === 'counseling' ? '💬'
+                 : inm.postFightRoom === 'library'    ? '📖'
+                 : '🔒';
       ctx.save();
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('🔒', inm.px, inm.py - base*1.9);
+      ctx.fillText(icon, inm.px, inm.py - base*1.9);
+      ctx.restore();
+    } else if (inm.inFight) {
+      // Kamp-markør: pulserende ⚔️ + rød ring rundt innsatt
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.03);
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.font = '18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚔️', inm.px, inm.py - base*1.9);
+      ctx.strokeStyle = `rgba(255,60,40,${0.4 + 0.5 * pulse})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(inm.px, inm.py, base * 1.2, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     } else if (inm.conflictFlashMs > 0) {
       const t = inm.conflictFlashMs / 1800;                      // 1..0 fade
@@ -1642,6 +2220,8 @@ function renderInmates() {
       ctx.fillText('\u2227', hx, hy - hr - base*0.6);
       ctx.restore();
     }
+
+    if (dimmed) ctx.restore();
   }
 }
 
@@ -1722,11 +2302,27 @@ function unrestReasons(inm) {
   if (inm.hygiene  < 30) r.push('Dårlig hygiene');
   if (inm.energi   < 25) r.push('Utmattet');
   if (inm.disiplin < 25) r.push('Lav disiplin');
-  const rival = GS.inmates.some(o =>
-    o.id !== inm.id && o.groupId !== inm.groupId &&
+  const rival = inm.groupId && GS.inmates.some(o =>
+    o.id !== inm.id && o.groupId && o.groupId !== inm.groupId &&
     Math.hypot(o.px - inm.px, o.py - inm.py) < TILE * 4);
   if (rival) r.push('Nær rival');
   if (inm.isBeingIntervened) r.push('Vakt griper inn');
+  // Kvirk-spesifikke årsaker
+  if (inm.kvirk === 'paranoid') {
+    const near = GS.inmates.filter(o =>
+      o.id !== inm.id && Math.hypot(o.px - inm.px, o.py - inm.py) < TILE * 3).length;
+    if (near >= 3) r.push('Paranoia i folkemengde');
+  }
+  if (inm.kvirk === 'nervøs') {
+    const guardNear = GS.guards.some(g =>
+      Math.hypot(g.px - inm.px, g.py - inm.py) < TILE * 5);
+    if (guardNear) r.push('Skremt av vakt');
+  }
+  if (inm.kvirk === 'fanatisk' && inm.idolId != null) {
+    const idol = GS.inmates.find(x => x.id === inm.idolId);
+    if (idol && idol.isolationTicks > 0) r.push('Idol borte');
+  }
+  if (inm.aktivitet === 'samling') r.push('I samling');
   return r.slice(0, 3);
 }
 let uiTimer = 0;
@@ -1740,24 +2336,20 @@ let lastSortTs   = 0;
 
 function matchesFilter(inm, f) {
   switch (f) {
-    case 'iso': return inm.isolationTicks > 0;
-    case 'con': return inm.conflictCooldown > 0;
-    case 'hot': return inm.unrest >= 70;
-    default:    return true;
+    case 'gA':    return inm.groupId === 'A';
+    case 'gB':    return inm.groupId === 'B';
+    case 'gC':    return inm.groupId === 'C';
+    case 'gNone': return inm.groupId == null;
+    default:      return true;
   }
 }
 
-function sortForFilter(ids, f) {
+function sortForFilter(ids /*, f */) {
+  // Alltid sortert etter uro (synkende), stabil på id
   const byId = new Map(GS.inmates.map(i => [i.id, i]));
-  const k = {
-    iso: inm => -inm.isolationTicks,
-    con: inm => -inm.conflictCooldown,
-    hot: inm => -inm.unrest,
-    all: inm => -inm.unrest,
-  }[f] || (inm => -inm.unrest);
   return ids.slice().sort((a, b) => {
     const ia = byId.get(a), ib = byId.get(b);
-    return k(ia) - k(ib) || a - b;
+    return (-ia.unrest) - (-ib.unrest) || a - b;
   });
 }
 
@@ -1845,15 +2437,16 @@ function applyOrder(list, desired) {
   currentOrder = desired.slice();
 }
 
-function updateTabCounts() {
-  const counts = { all: GS.inmates.length, iso: 0, con: 0, hot: 0 };
+function updateGangCounts() {
+  const counts = { all: GS.inmates.length, gA: 0, gB: 0, gC: 0, gNone: 0 };
   for (const inm of GS.inmates) {
-    if (inm.isolationTicks > 0) counts.iso++;
-    if (inm.conflictCooldown > 0) counts.con++;
-    if (inm.unrest >= 70) counts.hot++;
+    if      (inm.groupId === 'A') counts.gA++;
+    else if (inm.groupId === 'B') counts.gB++;
+    else if (inm.groupId === 'C') counts.gC++;
+    else                          counts.gNone++;
   }
-  document.querySelectorAll('#filter-tabs .ft').forEach(t => {
-    const span = t.querySelector('.ft-count');
+  document.querySelectorAll('#gang-strip .gs').forEach(t => {
+    const span = t.querySelector('.gs-count');
     const txt = `(${counts[t.dataset.f]})`;
     if (span.textContent !== txt) span.textContent = txt;
   });
@@ -1917,7 +2510,7 @@ function updateUI() {
 
   // Inmate list — in-place render, filter og stabil sortering
   renderInmateList();
-  updateTabCounts();
+  updateGangCounts();
 
   // Detail panel
   const sel = GS.inmates.find(i => i.id===GS.selectedId);
@@ -1928,18 +2521,40 @@ function updateUI() {
       <h4>${sel.name} <span style="color:#556;font-size:0.65rem;font-weight:normal">${sel.cellId}</span><span id="detail-close" style="float:right;cursor:pointer;color:#667;font-size:0.9rem;padding:0 4px" title="Lukk (Esc)">×</span></h4>
       <div class="dr"><span class="dl">Uro</span><span class="dv">${u3}%</span></div>
       <div class="dr"><span class="dl">Helse</span><span class="dv">${Math.round(sel.health)}%</span></div>
+      <div class="dr"><span class="dl">Styrke</span><span class="dv">${sel.strength >= 65 ? 'sterk' : sel.strength >= 50 ? 'middels' : 'svak'}</span></div>
+      ${sel.inFight ? `<div class="dr"><span class="dl">Status</span><span class="dv" style="color:#e05040">I kamp</span></div>` : ''}
+      ${(!sel.inFight && sel.postFightRoom) ? `<div class="dr"><span class="dl">Status</span><span class="dv" style="color:#c8b460">${sel.postFightRoom === 'isolation' ? 'På isolatet' : sel.postFightRoom === 'counseling' ? 'På samtale' : 'I biblioteket'}</span></div>` : ''}
       <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>
       <div class="dr"><span class="dl">Isolat</span><span class="dv">${sel.isolatCount} ganger</span></div>
       <div class="dr" style="margin-top:6px"><span class="dl">Personlighet</span></div>
       <div class="dr"><span class="dl">Temperament</span><span class="dv">${sel.temperament}</span></div>
       <div class="dr"><span class="dl">Sosial</span><span class="dv">${sel.sosial}</span></div>
       <div class="dr"><span class="dl">Stress</span><span class="dv">${sel.stressTolerance}</span></div>
+      ${sel.kvirk && sel.kvirk !== 'none' ? `<div class="dr"><span class="dl">Kvirk</span><span class="dv" style="color:#c8b460">${sel.kvirk}</span></div>` : ''}
+      <div class="dr"><span class="dl">Aktivitet</span><span class="dv">${sel.aktivitet || 'ingen'}</span></div>
+      <div class="dr" style="margin-top:6px"><span class="dl">Relasjoner</span></div>
+      <div class="dr"><span class="dl">Gjeng</span><span class="dv">${
+        sel.groupId
+          ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${GANG_COLOR[sel.groupId]};vertical-align:middle;margin-right:5px"></span>${sel.groupId}`
+          : '<span style="color:#556">Ingen</span>'
+      }</span></div>
+      <div class="dr"><span class="dl">Venn</span><span class="dv">${
+        (() => {
+          if (sel.friendId == null) return '<span style="color:#556">Ingen</span>';
+          const f = GS.inmates.find(x => x.id === sel.friendId);
+          return f ? f.name : '<span style="color:#556">Ingen</span>';
+        })()
+      }</span></div>
       ${(() => {
         const rs = unrestReasons(sel);
         if (!rs.length) return '';
         return `<div class="dr" style="margin-top:6px"><span class="dl">Uro-årsak</span></div>` +
           rs.map(r => `<div class="dr"><span class="dv" style="color:#b06838">&#x2191; ${r}</span></div>`).join('');
-      })()}`;
+      })()}
+      ${sel.history && sel.history.length ? `
+        <div class="dr" style="margin-top:6px"><span class="dl">Historikk</span></div>
+        ${sel.history.map(h => `<div class="dr"><span class="dv" style="color:#8a9098;font-size:0.72rem">&bull; ${h}</span></div>`).join('')}
+      ` : ''}`;
   } else {
     dp.innerHTML = '<span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>';
   }
@@ -1999,15 +2614,17 @@ canvas.addEventListener('mousemove', e => {
 });
 canvas.addEventListener('mouseleave', () => { GS.hoverId = null; canvas.style.cursor = 'default'; });
 
-// Filter-faner — permanent delegation-lytter
-document.getElementById('filter-tabs').addEventListener('click', e => {
-  const tab = e.target.closest('.ft');
+// Gjeng-strip — permanent delegation-lytter
+document.getElementById('gang-strip').addEventListener('click', e => {
+  const tab = e.target.closest('.gs');
   if (!tab) return;
   const f = tab.dataset.f;
-  if (f === GS.listFilter) return;
-  GS.listFilter = f;
-  document.querySelectorAll('#filter-tabs .ft').forEach(t => {
-    t.classList.toggle('on', t.dataset.f === f);
+  // Klikk på aktiv gjeng-knapp → tilbake til "alle". Klikk "alle" igjen → ingen effekt.
+  const next = (f === GS.listFilter && f !== 'all') ? 'all' : f;
+  if (next === GS.listFilter) return;
+  GS.listFilter = next;
+  document.querySelectorAll('#gang-strip .gs').forEach(t => {
+    t.classList.toggle('on', t.dataset.f === next);
   });
   lastSortTs = 0;               // tving reorder umiddelbart
   updateUI();
@@ -2073,6 +2690,11 @@ function saveGame() {
       hygiene: inm.hygiene, disiplin: inm.disiplin, dominans: inm.dominans,
       soningstidTotalt: inm.soningstidTotalt, soningstidIgjen: inm.soningstidIgjen,
       cafState: inm.cafState, sleepState: inm.sleepState,
+      isolationTicks: inm.isolationTicks, postFightRoom: inm.postFightRoom,
+      isolatCount: inm.isolatCount,
+      history: inm.history.slice(0, HISTORY_MAX),
+      friendId: inm.friendId, notifiedFriendInRoom: inm.notifiedFriendInRoom,
+      libraryVisits: inm.libraryVisits,
     })),
     guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi })),
   };
@@ -2091,6 +2713,11 @@ function loadGame() {
   for (const d of data.inmates) {
     const inm = new Inmate(d.cellId);
     Object.assign(inm, d);
+    if (!Array.isArray(inm.history)) inm.history = [];
+    if (inm.friendId === undefined) inm.friendId = null;
+    if (inm.notifiedFriendInRoom === undefined) inm.notifiedFriendInRoom = null;
+    if (typeof inm.libraryVisits !== 'number') inm.libraryVisits = 0;
+    inm._wasInLibrary = inm.zone === 'library';
     inm.waypoints = [];
     inm.currentSpotId = null;
     inm.phaseDelay = 0; inm.pendingZone = null;
