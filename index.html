@@ -157,6 +157,14 @@ canvas {
     <div class="stat-row"><span class="lbl">Innsatte</span><span class="val" id="s-count">0</span></div>
     <div class="stat-row"><span class="lbl">Vakter</span><span class="val" id="s-guards">0</span></div>
   </div>
+  <div class="panel">
+    <div class="stat-row"><span class="lbl">Kamper</span><span class="val" id="s-fights">0</span></div>
+    <div class="stat-row"><span class="lbl">Vennskap</span><span class="val" id="s-friendships">0</span></div>
+    <div class="stat-row"><span class="lbl">Isolat</span><span class="val" id="s-isolation">0</span></div>
+    <div class="stat-row"><span class="lbl">Samtaler</span><span class="val" id="s-counseling">0</span></div>
+    <div class="stat-row"><span class="lbl">Bibliotek</span><span class="val" id="s-library">0</span></div>
+    <div class="stat-row"><span class="lbl">Forsvunnet</span><span class="val" id="s-disappeared">0</span></div>
+  </div>
   <div id="inmate-section">
     <h3>Innsatte</h3>
     <div id="gang-strip">
@@ -590,7 +598,18 @@ const GS = {
   selectedId: null,
   hoverId:    null,
   listFilter: 'all',    // 'all' | 'iso' | 'con' | 'hot'
+  stats: {
+    isolation:    0,
+    counseling:   0,
+    library:      0,
+    fights:       0,
+    friendships:  0,
+    disappeared:  0,
+  },
 };
+function defaultStats() {
+  return { isolation:0, counseling:0, library:0, fights:0, friendships:0, disappeared:0 };
+}
 
 const HISTORY_MAX = 8;
 function addHistory(inm, text) {
@@ -1129,6 +1148,7 @@ class Inmate {
     this.conflictCount    = 0;    // teller konflikter siden siste isolat-slutt
     this.isolationTicks   = 0;    // gjenværende isolat-tid i ticks (0 = fri)
     this.isolatCount      = 0;    // totalt antall ganger i isolat
+    this.ry               = 0;    // omdømme — +2 kamp-seier, +1 venn i egen gjeng, -3 isolat
 
     // Fight state (v0.9.1 kamp-logikk)
     this.strength         = 40 + Math.random() * 40;   // 40–80
@@ -1428,6 +1448,25 @@ function spawn() {
   assignIdols();
 }
 
+// Gjengleder per A/B/C: høyest ry → høyest strength → lavest id.
+function computeLeaders() {
+  const leaders = {};
+  for (const gang of ['A','B','C']) {
+    let best = null;
+    for (const inm of GS.inmates) {
+      if (inm.groupId !== gang) continue;
+      if (!best) { best = inm; continue; }
+      if (inm.ry > best.ry) best = inm;
+      else if (inm.ry === best.ry) {
+        if (inm.strength > best.strength) best = inm;
+        else if (inm.strength === best.strength && inm.id < best.id) best = inm;
+      }
+    }
+    if (best) leaders[gang] = best.id;
+  }
+  return leaders;
+}
+
 // Fanatiske får en karismatisk idol etter spawn. Null hvis ingen karismatisk eksisterer.
 function assignIdols() {
   const karismatiske = GS.inmates.filter(i => i.kvirk === 'karismatisk');
@@ -1438,11 +1477,47 @@ function assignIdols() {
   }
 }
 
+// Fjerner innsatt på indeks i, rydder referanser, spawner erstatning.
+function removeInmate(i) {
+  const inm = GS.inmates[i];
+  const cellId = inm.cellId;
+  const removedId = inm.id;
+  const wasKarismatisk = inm.kvirk === 'karismatisk';
+
+  releaseSpot(removedId);
+  if (GS.selectedId === removedId) GS.selectedId = null;
+  if (GS.hoverId === removedId) GS.hoverId = null;
+
+  for (const other of GS.inmates) {
+    if (other === inm) continue;
+    if (other.friendId === removedId) {
+      other.friendId = null;
+      other.notifiedFriendInRoom = null;
+    }
+    if (other.idolId === removedId) other.idolId = null;
+    if (other.fightOpponent === removedId) {
+      other.fightOpponent = null;
+      other.inFight = false;
+      other.fightMs = 0;
+    }
+    if (other.notifiedFriendInRoom === removedId) other.notifiedFriendInRoom = null;
+  }
+
+  GS.stats.disappeared++;
+  GS.inmates.splice(i, 1);
+
+  const fresh = new Inmate(cellId);
+  fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
+  GS.inmates.push(fresh);
+
+  if (wasKarismatisk) assignIdols();
+}
+
 // ================================================================
 // CONFLICT MECHANIC
 // ================================================================
 const CONFLICT_DIST       = TILE * 1.5;   // rivaler trenger ikke være helt inntil
-const HEALTH_FLOOR        = 20;           // v1: ingen død — helse stopper her
+const HEALTH_FLOOR        = 0;            // 0 = innsatt kan forsvinne ved health<=0
 const CONFLICT_COOLDOWN   = 12000;        // 12s før samme innsatt kan igjen
 const FLASH_DURATION      = 1800;         // 1.8s visuell markør
 
@@ -1490,8 +1565,12 @@ function sendToRoomAfterFight(inm) {
   inm.postFightRoom      = room;
   inm.isolationTicks     = ROOM_DURATION[room];
   inm.conflictCount      = 0;
+  if (room === 'isolation')      GS.stats.isolation++;
+  else if (room === 'counseling') GS.stats.counseling++;
+  else if (room === 'library')    GS.stats.library++;
   if (room === 'isolation') {
     inm.isolatCount++;
+    inm.ry              -= 3;
     inm.soningstidIgjen  += 1;
     inm.soningstidTotalt += 1;
   }
@@ -1572,6 +1651,7 @@ function triggerConflict(a, b) {
 }
 
 function resolveFight(a, b) {
+  GS.stats.fights++;
   // Vinner = høyere (strength + tilfeldig 0–20)
   const scoreA = a.strength + Math.random() * 20;
   const scoreB = b.strength + Math.random() * 20;
@@ -1585,6 +1665,7 @@ function resolveFight(a, b) {
 
   // Vinner: litt lavere uro, ingen skade
   winner.unrest = Math.max(0, winner.unrest - 5);
+  winner.ry += 2;
 
   // Rydd opp kamp-flagg på begge
   a.inFight = b.inFight = false;
@@ -1690,6 +1771,11 @@ function runFriendFormation() {
       if (Math.random() < w) {
         a.friendId = b.id;
         b.friendId = a.id;
+        GS.stats.friendships++;
+        if (a.groupId && a.groupId === b.groupId) {
+          a.ry += 1;
+          b.ry += 1;
+        }
         addHistory(a, `Ble venn med ${b.name}`);
         addHistory(b, `Ble venn med ${a.name}`);
         break;
@@ -1954,9 +2040,15 @@ function tick() {
     }
     if (!inm._wasInLibrary && inm.postFightRoom === null) {
       inm.libraryVisits++;
+      GS.stats.library++;
     }
     // Setter flagget uansett — hindrer falsk økning når post-fight-halen slipper postFightRoom
     inm._wasInLibrary = true;
+  }
+
+  // Stakes: innsatte med health <= 0 fjernes og erstattes
+  for (let i = GS.inmates.length - 1; i >= 0; i--) {
+    if (GS.inmates[i].health <= 0) removeInmate(i);
   }
 
   GS.totalUnrest = GS.inmates.length
@@ -2395,7 +2487,9 @@ function updateCardContent(inm, isPinned) {
             + (inm.id === GS.selectedId ? ' sel' : '')
             + (isPinned ? ' pinned' : '');
   if (e.root.className !== cls) e.root.className = cls;
-  if (e.nameEl.textContent !== inm.name) e.nameEl.textContent = inm.name;
+  const isLeader = GS._leaders && inm.groupId && GS._leaders[inm.groupId] === inm.id;
+  const displayName = (isLeader ? '♛ ' : '') + inm.name;
+  if (e.nameEl.textContent !== displayName) e.nameEl.textContent = displayName;
   if (e.cellEl.textContent !== inm.cellId) e.cellEl.textContent = inm.cellId;
   const w = u2 + '%';
   if (e.barFill.style.width !== w) e.barFill.style.width = w;
@@ -2507,6 +2601,15 @@ function updateUI() {
   uEl.className = 'val ' + (u>70?'hi':u>40?'md':'lo');
   document.getElementById('s-count').textContent  = GS.inmates.length;
   document.getElementById('s-guards').textContent = GS.guards.length;
+  document.getElementById('s-fights').textContent      = GS.stats.fights;
+  document.getElementById('s-friendships').textContent = GS.stats.friendships;
+  document.getElementById('s-isolation').textContent   = GS.stats.isolation;
+  document.getElementById('s-counseling').textContent  = GS.stats.counseling;
+  document.getElementById('s-library').textContent     = GS.stats.library;
+  document.getElementById('s-disappeared').textContent = GS.stats.disappeared;
+
+  // Gjengledere beregnes én gang per UI-tick; leses av liste og detail-panel
+  GS._leaders = computeLeaders();
 
   // Inmate list — in-place render, filter og stabil sortering
   renderInmateList();
@@ -2526,6 +2629,7 @@ function updateUI() {
       ${(!sel.inFight && sel.postFightRoom) ? `<div class="dr"><span class="dl">Status</span><span class="dv" style="color:#c8b460">${sel.postFightRoom === 'isolation' ? 'På isolatet' : sel.postFightRoom === 'counseling' ? 'På samtale' : 'I biblioteket'}</span></div>` : ''}
       <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>
       <div class="dr"><span class="dl">Isolat</span><span class="dv">${sel.isolatCount} ganger</span></div>
+      <div class="dr"><span class="dl">Ry</span><span class="dv">${sel.ry}${GS._leaders && sel.groupId && GS._leaders[sel.groupId] === sel.id ? ' <span style="color:#c8b460">♛ Gjengleder</span>' : ''}</span></div>
       <div class="dr" style="margin-top:6px"><span class="dl">Personlighet</span></div>
       <div class="dr"><span class="dl">Temperament</span><span class="dv">${sel.temperament}</span></div>
       <div class="dr"><span class="dl">Sosial</span><span class="dv">${sel.sosial}</span></div>
@@ -2692,11 +2796,13 @@ function saveGame() {
       cafState: inm.cafState, sleepState: inm.sleepState,
       isolationTicks: inm.isolationTicks, postFightRoom: inm.postFightRoom,
       isolatCount: inm.isolatCount,
+      ry: inm.ry,
       history: inm.history.slice(0, HISTORY_MAX),
       friendId: inm.friendId, notifiedFriendInRoom: inm.notifiedFriendInRoom,
       libraryVisits: inm.libraryVisits,
     })),
     guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi })),
+    stats: { ...GS.stats },
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
@@ -2708,6 +2814,7 @@ function loadGame() {
   GS.map = buildMap();
   GS.day = data.day; GS.phaseIndex = data.phaseIndex;
   GS.phaseTick = data.phaseTick; GS.speed = data.speed;
+  GS.stats = Object.assign(defaultStats(), data.stats || {});
   GS.inmates = []; GS.guards = [];
   UID = 1;
   for (const d of data.inmates) {
@@ -2717,6 +2824,7 @@ function loadGame() {
     if (inm.friendId === undefined) inm.friendId = null;
     if (inm.notifiedFriendInRoom === undefined) inm.notifiedFriendInRoom = null;
     if (typeof inm.libraryVisits !== 'number') inm.libraryVisits = 0;
+    if (typeof inm.ry !== 'number') inm.ry = 0;
     inm._wasInLibrary = inm.zone === 'library';
     inm.waypoints = [];
     inm.currentSpotId = null;
@@ -2745,6 +2853,7 @@ function startGame(fromSave = false) {
   } else {
     GS.map = buildMap();
     GS.day = 1; GS.phaseIndex = 0; GS.phaseTick = 0;
+    GS.stats = defaultStats();
     GS.inmates = []; GS.guards = [];
     spawn();
     const initZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
