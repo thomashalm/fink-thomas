@@ -44,6 +44,13 @@ canvas {
 .val.hi { color:#c84040; }
 .val.md { color:#b87830; }
 .val.lo { color:#388050; }
+.mlog { font-size:0.72rem; color:#8a9098; margin:2px 0; display:flex; gap:6px; }
+.mlog .mlog-day { color:#555; flex-shrink:0; width:28px; }
+.mlog.arrival { color:#c9a227; }
+.mlog.rivalry { color:#d45f5f; }
+.mlog.fall    { color:#7a96b8; }
+.mlog.throne  { color:#e0c160; font-weight:600; }
+.mlog.bed     { color:#9a8a6a; }
 #inmate-section { flex:1; min-height:90px; overflow-y:auto; }
 #inmate-section h3 { font-size:0.6rem; letter-spacing:2px; color:#334; text-transform:uppercase; padding:6px 14px 5px; border-bottom:1px solid #1a1e24; }
 #gang-strip {
@@ -117,6 +124,18 @@ canvas {
 .pb:hover { background:#1c2028; border-color:#445560; color:#99a; }
 .pb.on { background:#1e2030; border-color:#8870a0; color:#c0a0e0;
          box-shadow: 0 0 5px rgba(136,112,160,0.2); }
+.pwr {
+  display:flex; justify-content:space-between; align-items:center;
+  width:100%; margin-bottom:4px;
+  background:#1a1e24; border:1px solid #30363e; color:#ccc;
+  padding:6px 10px; font-family:monospace; font-size:0.72rem;
+  cursor:pointer; border-radius:3px;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.pwr:hover:not(:disabled) { border-color:#c8b460; color:#c8b460; background:#1c2028; }
+.pwr:disabled { color:#445; border-color:#1a1e24; cursor:default; background:#141820; }
+.pwr-cd { font-size:0.6rem; color:#667; letter-spacing:1px; }
+.pwr:not(:disabled) .pwr-cd { color:#388050; }
 #tabbar { display:flex; border-bottom:1px solid #1e2228; background:#141820; }
 .tb { flex:1; background:transparent; border:none;
       border-bottom:2px solid transparent;
@@ -149,7 +168,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.9.4 &bull; 2025</p>
+  <p>Panoptikon v0.9.8 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-continue" disabled>Continue</button>
   <button class="mb" id="btn-load" disabled>Load</button>
@@ -158,7 +177,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.9.4</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.9.8</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -191,6 +210,22 @@ canvas {
       <div class="stat-row"><span class="lbl">Bibliotek</span><span class="val" id="s-library">0</span></div>
       <div class="stat-row"><span class="lbl">Verksted</span><span class="val" id="s-workshop">0</span></div>
       <div class="stat-row"><span class="lbl">Forsvunnet</span><span class="val" id="s-disappeared">0</span></div>
+    </div>
+    <div class="panel" id="powers">
+      <div style="font-size:0.6rem;letter-spacing:2px;color:#334;text-transform:uppercase;margin-bottom:6px">Powers</div>
+      <button class="pwr" data-pwr="newcomer"><span>👤 Berømt nykommer</span><span class="pwr-cd">klar</span></button>
+      <button class="pwr" data-pwr="gangwar"><span>🔥 Gjengkrig</span><span class="pwr-cd">klar</span></button>
+    </div>
+    <div class="panel" id="maktlogg-panel">
+      <div style="font-size:0.6rem;letter-spacing:2px;color:#334;text-transform:uppercase;margin-bottom:6px">Maktlogg</div>
+      <div id="maktlogg-list"></div>
+    </div>
+    <div class="panel" id="departed-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:0.6rem;letter-spacing:2px;color:#334;text-transform:uppercase">Forsvunnet</span>
+        <button id="departed-toggle" class="sb" style="font-size:0.68rem;padding:2px 6px">Vis</button>
+      </div>
+      <div id="departed-list" style="display:none"></div>
     </div>
   </div>
   <div class="tabpane on" data-tab="innsatte">
@@ -665,36 +700,44 @@ const CELL_DEFS = [
   // dr row: beds at 2,5 → walkable: 1,3,4,6,7; lr row: toilet at 3 → walkable: 1,2,4,5,6,7
   { id:'L1', side:'L', doorRow:10, doorCol:8, innerCol:9,
     beds:[{x:2,y:10},{x:5,y:10}],
+    floorPos:{x:4,y:11},
     walkPos:[{x:1,y:10},{x:3,y:10},{x:4,y:10},{x:6,y:10},{x:7,y:10},
              {x:1,y:11},{x:2,y:11},{x:4,y:11},{x:6,y:11}] },
   { id:'L2', side:'L', doorRow:14, doorCol:8, innerCol:9,
     beds:[{x:2,y:14},{x:5,y:14}],
+    floorPos:{x:4,y:15},
     walkPos:[{x:1,y:14},{x:3,y:14},{x:4,y:14},{x:6,y:14},{x:7,y:14},
              {x:1,y:15},{x:2,y:15},{x:4,y:15},{x:6,y:15}] },
   { id:'L3', side:'L', doorRow:18, doorCol:8, innerCol:9,
     beds:[{x:2,y:18},{x:5,y:18}],
+    floorPos:{x:4,y:19},
     walkPos:[{x:1,y:18},{x:3,y:18},{x:4,y:18},{x:6,y:18},{x:7,y:18},
              {x:1,y:19},{x:2,y:19},{x:4,y:19},{x:6,y:19}] },
   { id:'L4', side:'L', doorRow:21, doorCol:8, innerCol:9,
     beds:[{x:2,y:21},{x:5,y:21}],
+    floorPos:{x:4,y:22},
     walkPos:[{x:1,y:21},{x:3,y:21},{x:4,y:21},{x:6,y:21},{x:7,y:21},
              {x:1,y:22},{x:2,y:22},{x:4,y:22},{x:6,y:22}] },
   // Right cells: cols 37-42, door col 36, inner col 35
   // dr row: beds at 38,41 → walkable: 37,39,40,42; lr row: toilet at 40 → walkable: 37,38,39,41,42
   { id:'R1', side:'R', doorRow:10, doorCol:36, innerCol:35,
     beds:[{x:38,y:10},{x:41,y:10}],
+    floorPos:{x:39,y:11},
     walkPos:[{x:37,y:10},{x:39,y:10},{x:40,y:10},{x:42,y:10},
              {x:37,y:11},{x:38,y:11},{x:39,y:11},{x:41,y:11},{x:42,y:11}] },
   { id:'R2', side:'R', doorRow:14, doorCol:36, innerCol:35,
     beds:[{x:38,y:14},{x:41,y:14}],
+    floorPos:{x:39,y:15},
     walkPos:[{x:37,y:14},{x:39,y:14},{x:40,y:14},{x:42,y:14},
              {x:37,y:15},{x:38,y:15},{x:39,y:15},{x:41,y:15},{x:42,y:15}] },
   { id:'R3', side:'R', doorRow:18, doorCol:36, innerCol:35,
     beds:[{x:38,y:18},{x:41,y:18}],
+    floorPos:{x:39,y:19},
     walkPos:[{x:37,y:18},{x:39,y:18},{x:40,y:18},{x:42,y:18},
              {x:37,y:19},{x:38,y:19},{x:39,y:19},{x:41,y:19},{x:42,y:19}] },
   { id:'R4', side:'R', doorRow:21, doorCol:36, innerCol:35,
     beds:[{x:38,y:21},{x:41,y:21}],
+    floorPos:{x:39,y:22},
     walkPos:[{x:37,y:21},{x:39,y:21},{x:40,y:21},{x:42,y:21},
              {x:37,y:22},{x:38,y:22},{x:39,y:22},{x:41,y:22},{x:42,y:22}] },
 ];
@@ -739,6 +782,11 @@ const GS = {
     friendships:  0,
     disappeared:  0,
   },
+  gangwarFlashMs:  0,
+  powerCooldowns:  { newcomer: 0, gangwar: 0 },
+  powerLog:        [],
+  topDogId:        null,
+  departed:        [],   // tidligere innsatte {id, name, day, reason}
 };
 function defaultStats() {
   return { isolation:0, counseling:0, library:0, workshop:0, fights:0, friendships:0, disappeared:0 };
@@ -750,6 +798,53 @@ function addHistory(inm, text) {
   if (inm.history.length > HISTORY_MAX) inm.history.length = HISTORY_MAX;
 }
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+const POWER_LOG_MAX = 10;
+function addPowerEvent(kind, text) {
+  GS.powerLog.unshift({ day: GS.day, kind, text });
+  if (GS.powerLog.length > POWER_LOG_MAX) GS.powerLog.length = POWER_LOG_MAX;
+}
+
+const DEPARTED_MAX = 40;
+function addDeparted(inm, reason) {
+  GS.departed.unshift({ id: inm.id, name: inm.name, day: GS.day, reason });
+  if (GS.departed.length > DEPARTED_MAX) GS.departed.length = DEPARTED_MAX;
+  // Rydd opp ambisjoner som pekte på denne innsatte
+  for (const other of GS.inmates) {
+    if (other.targetId === inm.id) {
+      other.ambition = null;
+      other.targetId = null;
+    }
+  }
+}
+function countPastDuels(a, b) {
+  if (!a.history || !b.name) return 0;
+  let n = 0;
+  for (const line of a.history) {
+    if (line.includes('⚔') && line.includes(b.name)) n++;
+  }
+  return n;
+}
+function countRivalWinStreak(inm) {
+  if (!inm.history) return 0;
+  let streak = 0;
+  for (const line of inm.history) {
+    if (!line.includes('⚔')) continue;
+    if (line.startsWith('⚔ Dominerte') || line.startsWith('⚔ Holdt') || line.startsWith('⚔ Knuste')) streak++;
+    else break;
+  }
+  return streak;
+}
+function countRivalLossStreak(inm) {
+  if (!inm.history) return 0;
+  let streak = 0;
+  for (const line of inm.history) {
+    if (!line.includes('⚔')) continue;
+    if (line.startsWith('⚔ Tapte') || line.startsWith('⚔ Ble banket') || line.startsWith('⚔ Gikk ned')) streak++;
+    else break;
+  }
+  return streak;
+}
 
 
 // ================================================================
@@ -1250,8 +1345,13 @@ class Inmate {
     this.cafSeat          = null;
     this.cafCounterDelay  = 0;
     this.cafCounterTarget = 0;
-    this.sleepState          = null;   // null | 'to_bed' | 'going_to_bed' | 'in_bed'
+    this.sleepState          = null;   // null | 'to_bed' | 'going_to_bed' | 'in_bed' | 'to_floor' | 'on_floor'
     this.isBeingIntervened   = false;
+    this.isFloorSleeper      = false;
+    this.hasDominatedForBed  = false;
+    this.bedChallengeVs      = null;   // id på motstander i spawn-seng-kamp; null ellers
+    this.ambition            = null;   // null | 'take_over' (kun for berømt nykommer)
+    this.targetId            = null;   // id på valgt motstander når ambition === 'take_over'
 
     // Core stats
     this.unrest   = 10 + Math.random()*20;
@@ -1319,11 +1419,16 @@ class Inmate {
     this.isBored         = false;
     this._wasInWorkshop  = false;
 
-    // Starting position
+    // Starting position — spawnNewcomer konstruerer med null cellId og setter px/py selv
     const def = getCellDef(cellId);
-    const pos = def.walkPos[0];
-    this.px = pos.x * TILE + TILE/2;
-    this.py = pos.y * TILE + TILE/2;
+    if (def) {
+      const pos = def.walkPos[0];
+      this.px = pos.x * TILE + TILE/2;
+      this.py = pos.y * TILE + TILE/2;
+    } else {
+      this.px = 0;
+      this.py = 0;
+    }
 
     // Crime category
     this.kategori = KATEGORIER[Math.floor(Math.random()*KATEGORIER.length)];
@@ -1388,8 +1493,10 @@ class Inmate {
     } else if (zone === 'cell') {
       this.cafState   = null;
       this.cafSeat    = null;
-      // Night: will walk to bed after arriving in cell
-      this.sleepState = PHASES[GS.phaseIndex] === 'Natt' ? 'to_bed' : null;
+      // Night: will walk to bed (or floor) after arriving in cell
+      this.sleepState = PHASES[GS.phaseIndex] === 'Natt'
+        ? (this.isFloorSleeper ? 'to_floor' : 'to_bed')
+        : null;
       this.waypoints  = buildPath(this, 'cell');
     } else {
       this.cafState   = null;
@@ -1443,14 +1550,23 @@ class Inmate {
         this.sleepState = 'in_bed';
         return;
       }
+      // Floor sleeper — walk to floorPos
+      if (this.sleepState === 'to_floor' && this.zone === 'cell') {
+        const def = getCellDef(this.cellId);
+        const fp  = def.floorPos;
+        this.waypoints = [{ px: fp.x * TILE + TILE / 2, py: fp.y * TILE + TILE / 2 }];
+        this.sleepState = 'on_floor';
+        return;
+      }
 
       // No wander during night, shower, or while seated eating
       const isNight  = PHASES[GS.phaseIndex] === 'Natt';
       const isShower = this.zone === 'shower';
       const isSeated     = this.cafState === 'seated';
       const isInBed      = this.sleepState === 'in_bed';
+      const isOnFloor    = this.sleepState === 'on_floor';
       const isIntervened = this.isBeingIntervened;
-      if (!isNight && !isShower && !isSeated && !isInBed && !isIntervened && Math.random() < 0.001) {
+      if (!isNight && !isShower && !isSeated && !isInBed && !isOnFloor && !isIntervened && Math.random() < 0.001) {
         this.waypoints = buildPath(this, this.targetZone);
       }
       return;
@@ -1597,6 +1713,131 @@ function spawn() {
   assignIdols();
 }
 
+// Berømt nykommer — power-spawn med overstyrt profil + dominans-basert seng-kamp
+function positionInmateAt(inm, tx, ty) {
+  inm.px = tx * TILE + TILE / 2;
+  inm.py = ty * TILE + TILE / 2;
+}
+
+// Velger en innsatt nykommer skal utfordre: helst en gjengleder, ellers høyest respekt.
+function pickTakeOverTarget() {
+  const leaders   = computeLeaders();
+  const leaderIds = Object.values(leaders).filter(Boolean);
+  const candidates = GS.inmates.filter(i => i.isolationTicks === 0);
+  if (candidates.length === 0) return null;
+  const leaderCands = candidates.filter(i => leaderIds.includes(i.id));
+  const pool = leaderCands.length > 0 ? leaderCands : candidates;
+  pool.sort((a, b) => b.respekt - a.respekt);
+  return pool[0].id;
+}
+
+function spawnNewcomer() {
+  // Tell opp per celle
+  const cellCounts = {};
+  const cellFloorOccupied = {};
+  for (const inm of GS.inmates) {
+    if (inm.cellId) {
+      cellCounts[inm.cellId] = (cellCounts[inm.cellId] || 0) + 1;
+      if (inm.isFloorSleeper) cellFloorOccupied[inm.cellId] = true;
+    }
+  }
+
+  const inm = new Inmate(null);           // cellId settes nedenfor
+  inm.respekt     = 70;
+  inm.temperament = 'aggressive';
+  inm.groupId     = null;
+  inm.strength    = 70 + Math.random() * 15;
+
+  // Ambisjon: utfordre den sterkeste / en gjengleder
+  inm.ambition = 'take_over';
+  inm.targetId = pickTakeOverTarget();
+  const target = inm.targetId != null ? GS.inmates.find(x => x.id === inm.targetId) : null;
+  if (target) {
+    addHistory(inm, `🎯 Har blinket ut ${target.name} som mål.`);
+    addPowerEvent('arrival', `🎯 ${inm.name} sikter mot ${target.name}.`);
+  }
+
+  // Gjengledere skjermes fra å miste seng via spawn-logikk
+  const leaders   = computeLeaders();
+  const leaderIds = new Set(Object.values(leaders));
+
+  // Gyldige dominans-celler: full (2 innsatte), ingen floor sleeper, minst én ikke-leder kandidat
+  const validCells = CELL_DEFS.filter(c => {
+    if ((cellCounts[c.id] || 0) < 2) return false;
+    if (cellFloorOccupied[c.id])     return false;
+    return GS.inmates.some(i =>
+      i.cellId === c.id && !i.isFloorSleeper && !leaderIds.has(i.id));
+  });
+
+  if (validCells.length === 0) {
+    // Fallback: nykommer blir floor sleeper. Prioriter celle med minst én ikke-leder.
+    let fallbackCells = CELL_DEFS.filter(c => {
+      if (cellFloorOccupied[c.id]) return false;
+      return GS.inmates.some(i => i.cellId === c.id && !leaderIds.has(i.id));
+    });
+    if (fallbackCells.length === 0) {
+      fallbackCells = CELL_DEFS.filter(c => !cellFloorOccupied[c.id]);
+    }
+    if (fallbackCells.length === 0) {
+      GS.powerCooldowns.newcomer = 0;
+      return null;
+    }
+    const target = fallbackCells[Math.floor(Math.random() * fallbackCells.length)];
+    inm.cellId         = target.id;
+    inm.cellSlot       = null;
+    inm.isFloorSleeper = true;
+    addHistory(inm, `🛏 Måtte ta gulvet — ingen å utfordre.`);
+    addPowerEvent('bed', `🛏 ${inm.name} måtte ta gulvet — ingen motstand å overvinne.`);
+    const fp = target.floorPos;
+    positionInmateAt(inm, fp.x, fp.y);
+  } else {
+    // Dominans-kamp i tilfeldig gyldig celle — weakest er alltid ikke-leder og ledig
+    const targetCell = validCells[Math.floor(Math.random() * validCells.length)];
+    const candidates = GS.inmates
+      .filter(i => i.cellId === targetCell.id
+                   && !i.isFloorSleeper
+                   && !leaderIds.has(i.id)
+                   && !i.inFight
+                   && i.isolationTicks === 0)
+      .sort((a, b) => a.respekt - b.respekt);
+
+    if (candidates.length === 0) {
+      // Alle kandidater i targetCell er opptatt — fall tilbake til floor sleeper (samme mønster som ingen gyldig celle)
+      inm.cellId         = targetCell.id;
+      inm.cellSlot       = null;
+      inm.isFloorSleeper = true;
+      addHistory(inm, `🛏 Måtte ta gulvet — ingen å utfordre.`);
+      addPowerEvent('bed', `🛏 ${inm.name} måtte ta gulvet — ingen motstand å overvinne.`);
+      const fp = targetCell.floorPos;
+      positionInmateAt(inm, fp.x, fp.y);
+      inm.conflictFlashMs = FLASH_DURATION;
+      inm.setTargetZone('cafeteria');
+      GS.inmates.push(inm);
+      return inm;
+    }
+
+    const weakest = candidates[0];
+    // Plasser nykommer i cellen for kampen — ingen seng/slot tildelt ennå
+    inm.cellId         = targetCell.id;
+    inm.cellSlot       = null;
+    inm.isFloorSleeper = false;                 // midlertidig; avgjøres i resolveFight-hook
+    positionInmateAt(inm, weakest.px, weakest.py);
+
+    // Koble de to til en spawn-seng-kamp
+    inm.bedChallengeVs     = weakest.id;
+    weakest.bedChallengeVs = inm.id;
+
+    GS.inmates.push(inm);                       // må være i lista før triggerConflict
+    triggerConflict(inm, weakest);              // ekte kamp: flash + 3,5–5s timer + resolveFight
+    return inm;
+  }
+
+  inm.conflictFlashMs = FLASH_DURATION;
+  inm.setTargetZone('cafeteria');
+  GS.inmates.push(inm);
+  return inm;
+}
+
 // Gjengleder per A/B/C: høyest respekt → høyest strength → lavest id.
 function computeLeaders() {
   const leaders = {};
@@ -1627,12 +1868,13 @@ function assignIdols() {
 }
 
 // Fjerner innsatt på indeks i, rydder referanser, spawner erstatning.
-function removeInmate(i) {
+function removeInmate(i, reason = 'Døde av skader') {
   const inm = GS.inmates[i];
   const cellId = inm.cellId;
   const removedId = inm.id;
   const wasKarismatisk = inm.kvirk === 'karismatisk';
 
+  addDeparted(inm, reason);
   releaseSpot(removedId);
   if (GS.selectedId === removedId) GS.selectedId = null;
   if (GS.hoverId === removedId) GS.hoverId = null;
@@ -1675,6 +1917,14 @@ const FLASH_DURATION      = 1800;         // 1.8s visuell markør
 const STRESS_THRESHOLD = { low: 25, medium: 40, high: 55 };
 // temperament → sjanse for å TRIGGE når alle andre krav er møtt
 const AGGRESSION_ROLL  = { calm: 0.10, normal: 0.45, aggressive: 0.80 };
+
+// Rivalitet — dominante innsatte oppsøker hverandre og slåss med større utslag
+const DOMINANT_THRESHOLD    = 65;     // respekt-grense for "dominant"
+const RIVALRY_CHANCE_MULT   = 1.8;    // trigger-sjanse × denne når begge er dominante
+const RIVALRY_COOLDOWN_MULT = 0.6;    // kortere cooldown mellom rivaler
+const WEAK_SKIP_CHANCE      = 0.5;    // dominant ignorerer svak (resp < 50) så ofte
+const RIVALRY_WIN_RESPEKT   = 5;      // rival-seier (vanlig kamp gir +2)
+const RIVALRY_LOSS_RESPEKT  = 4;      // rival-tap (vanlig kamp har 0 tap)
 
 // Rom-opphold: konsekvens av gjentatte konflikter. Innsatt "velger" ett av tre rom.
 const ISOLATION_THRESHOLD = 3;                                     // konflikter før rom-ruting
@@ -1730,7 +1980,7 @@ function sendToRoomAfterFight(inm) {
   releaseSpot(inm.id);
   inm.setTargetZone(room);
   addHistory(inm,
-    room === 'isolation'  ? 'Sendt til isolat' :
+    room === 'isolation'  ? '🔒 Sendt til isolat.' :
     room === 'counseling' ? 'Sendt til samtale' :
                             'Sendt til biblioteket');
 }
@@ -1794,8 +2044,10 @@ function triggerConflict(a, b) {
   b.waypoints = [];
   a.inConflict = b.inConflict = true;
   a.conflictFlashMs = b.conflictFlashMs = FLASH_DURATION;
-  a.conflictCooldown = a.kvirk === 'impulsiv' ? CONFLICT_COOLDOWN/2 : CONFLICT_COOLDOWN;
-  b.conflictCooldown = b.kvirk === 'impulsiv' ? CONFLICT_COOLDOWN/2 : CONFLICT_COOLDOWN;
+  const rivalry = a.respekt > DOMINANT_THRESHOLD && b.respekt > DOMINANT_THRESHOLD;
+  const cdMult  = rivalry ? RIVALRY_COOLDOWN_MULT : 1.0;
+  a.conflictCooldown = (a.kvirk === 'impulsiv' ? CONFLICT_COOLDOWN/2 : CONFLICT_COOLDOWN) * cdMult;
+  b.conflictCooldown = (b.kvirk === 'impulsiv' ? CONFLICT_COOLDOWN/2 : CONFLICT_COOLDOWN) * cdMult;
   a.conflictCount++;
   b.conflictCount++;
   // Isolat-sjekk er flyttet til resolveFight — applies etter at kampen er over
@@ -1816,9 +2068,35 @@ function resolveFight(a, b) {
 
   // Vinner: litt lavere uro, ingen skade
   winner.unrest = Math.max(0, winner.unrest - 5);
-  winner.respekt += 2;
+
+  // Rivalitet — to dominante som slåss gir større respekt-utslag + egen historikk
+  const rivalry = winner.respekt > DOMINANT_THRESHOLD && loser.respekt > DOMINANT_THRESHOLD;
+  const loserWasDominant = loser.respekt > DOMINANT_THRESHOLD;
+  if (rivalry) {
+    winner.respekt = Math.min(100, winner.respekt + RIVALRY_WIN_RESPEKT);
+    loser.respekt  = Math.max(0,   loser.respekt  - RIVALRY_LOSS_RESPEKT);
+  } else {
+    winner.respekt += 2;
+  }
   winner.fightsWon++;
   loser.fightsLost++;
+
+  // Ambisjons-kamp: ekstra utslag hvis kampen var mot målet
+  const ambitionWin  = winner.ambition === 'take_over' && winner.targetId === loser.id;
+  const ambitionLoss = loser.ambition  === 'take_over' && loser.targetId  === winner.id;
+  if (ambitionWin) {
+    winner.respekt = Math.min(100, winner.respekt + 5);
+    winner.ambition = null;
+    winner.targetId = null;
+    addHistory(winner, `🎯 Tok over — ${loser.name} er slått.`);
+    addPowerEvent('throne', `🎯 ${winner.name} nådde målet sitt.`);
+  } else if (ambitionLoss) {
+    loser.respekt = Math.max(0, loser.respekt - 8);
+    loser.ambition = null;
+    loser.targetId = null;
+    addHistory(loser, `🎯 Mistet ansikt mot ${winner.name} — ambisjonen falt.`);
+    addPowerEvent('fall', `🎯 ${loser.name} tapte mot sitt mål.`);
+  }
 
   // Rydd opp kamp-flagg på begge
   a.inFight = b.inFight = false;
@@ -1826,20 +2104,115 @@ function resolveFight(a, b) {
   a.fightOpponent = b.fightOpponent = null;
 
   // Historikk — kort hendelse per innsatt
-  addHistory(winner, pickRandom([
-    `Vant kamp mot ${loser.name}`,
-    `Banka ${loser.name}`,
-    `Ble stående — ${loser.name} gikk ned`,
-  ]));
-  addHistory(loser, pickRandom([
-    `Tapte mot ${winner.name}`,
-    `Ble slått ned av ${winner.name}`,
-    `Kom dårlig ut mot ${winner.name}`,
-  ]));
+  if (rivalry) {
+    // Utvikling over tid: les ut av historikken FØR nye linjer skrives
+    const duelCount    = countPastDuels(winner, loser);
+    const winnerStreak = countRivalWinStreak(winner);
+    const loserStreak  = countRivalLossStreak(loser);
+
+    let wText;
+    if (duelCount >= 2)         wText = `⚔ Knuste ${loser.name} igjen — ${loser.name} har ingen sjanse.`;
+    else if (winnerStreak >= 2) wText = `⚔ Dominerte ${loser.name} — begynner å ta over.`;
+    else if (duelCount === 1)   wText = `⚔ Dominerte ${loser.name} på nytt.`;
+    else                         wText = `⚔ Dominerte rivalen ${loser.name} — respekten steg.`;
+
+    let lText;
+    if (duelCount >= 2)         lText = `⚔ Tapte mot ${winner.name} igjen — underlegen.`;
+    else if (loserStreak >= 2)  lText = `⚔ Ble banket av ${winner.name} — et tydelig fall.`;
+    else if (duelCount === 1)   lText = `⚔ Tapte mot ${winner.name} nok en gang.`;
+    else                         lText = `⚔ Tapte mot ${winner.name} — mistet ansikt.`;
+
+    addHistory(winner, wText);
+    addHistory(loser,  lText);
+
+    let mText;
+    if (duelCount >= 2)         mText = `⚔ ${winner.name} knuste ${loser.name} igjen.`;
+    else if (winnerStreak >= 2) mText = `⚔ ${winner.name} tar over — slo ${loser.name}.`;
+    else if (duelCount === 1)   mText = `⚔ ${winner.name} vs ${loser.name} — andre runde til ${winner.name}.`;
+    else                         mText = `⚔ ${winner.name} slo ned ${loser.name}.`;
+    addPowerEvent('rivalry', mText);
+  } else {
+    addHistory(winner, pickRandom([
+      `Vant kamp mot ${loser.name}`,
+      `Banka ${loser.name}`,
+      `Ble stående — ${loser.name} gikk ned`,
+    ]));
+    addHistory(loser, pickRandom([
+      `Tapte mot ${winner.name}`,
+      `Ble slått ned av ${winner.name}`,
+      `Kom dårlig ut mot ${winner.name}`,
+    ]));
+  }
+
+  // Fall fra toppen: utløses kun ved overgang
+  if (loserWasDominant && loser.respekt <= DOMINANT_THRESHOLD) {
+    addPowerEvent('fall', `📉 ${loser.name} falt fra toppen.`);
+    addHistory(loser, `📉 Mistet sin posisjon — ikke lenger respektert.`);
+  }
 
   // Rom-ruting hvis de har nådd terskel (innsatt "velger" isolation/counseling/library)
   if (a.conflictCount >= ISOLATION_THRESHOLD) sendToRoomAfterFight(a);
   if (b.conflictCount >= ISOLATION_THRESHOLD) sendToRoomAfterFight(b);
+
+  // Spawn-seng-kamp: hvis en av sidene hadde bedChallengeVs, avgjør seng nå.
+  if (winner.bedChallengeVs === loser.id || loser.bedChallengeVs === winner.id) {
+    const newcomer = winner.bedChallengeVs === loser.id ? winner : loser;
+    const defender = newcomer === winner ? loser : winner;
+    const won      = winner === newcomer;
+    const cellDef  = getCellDef(defender.cellId);
+
+    if (won) {
+      newcomer.cellId   = defender.cellId;
+      newcomer.cellSlot = defender.cellSlot;
+      newcomer.isFloorSleeper = false;
+      defender.isFloorSleeper = true;
+      defender.cellSlot       = null;
+      defender.sleepState     = null;
+      if (!newcomer.hasDominatedForBed) {
+        newcomer.respekt = Math.min(100, newcomer.respekt + 3);
+        newcomer.hasDominatedForBed = true;
+      }
+      addHistory(newcomer, `🛏 Tok sengen fra ${defender.name}. Markerte seg fra første dag.`);
+      addHistory(defender, `🛏 Mistet sengen til ${newcomer.name}. Flyttet ned på gulvet.`);
+      addPowerEvent('bed', `🛏 ${newcomer.name} kastet ${defender.name} på gulvet.`);
+
+      // Posisjon: vinner til seng-slot, taper til gulv
+      if (cellDef) {
+        const wp = cellDef.walkPos[newcomer.cellSlot] || cellDef.walkPos[0];
+        positionInmateAt(newcomer, wp.x, wp.y);
+        positionInmateAt(defender, cellDef.floorPos.x, cellDef.floorPos.y);
+      } else {
+        console.warn('[bedChallenge] Mangler cellDef for', defender.cellId);
+      }
+    } else {
+      newcomer.cellId         = defender.cellId;
+      newcomer.cellSlot       = null;
+      newcomer.isFloorSleeper = true;
+      addHistory(newcomer, `🛏 Måtte ta gulvet — ${defender.name} holdt stand.`);
+      addPowerEvent('bed', `🛏 ${newcomer.name} måtte ta gulvet — ikke sterk nok.`);
+
+      // Posisjon: nykommer til gulv; defender står urørt på sin walkPos
+      if (cellDef) {
+        positionInmateAt(newcomer, cellDef.floorPos.x, cellDef.floorPos.y);
+      } else {
+        console.warn('[bedChallenge] Mangler cellDef for', defender.cellId);
+      }
+    }
+    newcomer.bedChallengeVs = null;
+    defender.bedChallengeVs = null;
+  }
+}
+
+// Gjengkrig — massiv unrest-injeksjon i to gjenger
+function triggerGangWar(gA, gB) {
+  for (const inm of GS.inmates) {
+    if (inm.groupId !== gA && inm.groupId !== gB) continue;
+    if (inm.isolationTicks > 0 || inm.inFight) continue;
+    inm.unrest = Math.max(inm.unrest, 85);
+    inm.conflictCooldown = 0;
+    inm.conflictFlashMs = FLASH_DURATION;
+    addHistory(inm, `Gjengkrig — ${gA} mot ${gB}.`);
+  }
 }
 
 function runConflictCheck() {
@@ -1870,8 +2243,24 @@ function runConflictCheck() {
       const d  = Math.sqrt(dx*dx + dy*dy);
       if (d > CONFLICT_DIST) continue;
 
+      // Ambisjons-par: nykommer møter sitt mål → hopp over weak-skip, tving chance=1.0
+      const ambitionPair =
+        (a.ambition === 'take_over' && a.targetId === b.id) ||
+        (b.ambition === 'take_over' && b.targetId === a.id);
+
+      if (!ambitionPair) {
+        // Dominant mot svak: skip halvparten av gangene — gir rivaler tid til å finne hverandre
+        if (a.respekt > DOMINANT_THRESHOLD && b.respekt < 50 && Math.random() < WEAK_SKIP_CHANCE) continue;
+        if (b.respekt > DOMINANT_THRESHOLD && a.respekt < 50 && Math.random() < WEAK_SKIP_CHANCE) continue;
+      }
+
       // Trigger-sjanse = høyeste av de to sine aggresjon
-      const chance = Math.max(AGGRESSION_ROLL[a.temperament], AGGRESSION_ROLL[b.temperament]);
+      let chance = Math.max(AGGRESSION_ROLL[a.temperament], AGGRESSION_ROLL[b.temperament]);
+      // Rivalitet — begge dominante → økt sjanse
+      if (a.respekt > DOMINANT_THRESHOLD && b.respekt > DOMINANT_THRESHOLD) {
+        chance = Math.min(1.0, chance * RIVALRY_CHANCE_MULT);
+      }
+      if (ambitionPair) chance = 1.0;
       if (Math.random() > chance) continue;
 
       triggerConflict(a, b);
@@ -1984,11 +2373,15 @@ function tick() {
     GS.phaseIndex = (GS.phaseIndex + 1) % PHASES.length;
     if (GS.phaseIndex === 0) {
       GS.day++;
+      for (const k in GS.powerCooldowns) {
+        if (GS.powerCooldowns[k] > 0) GS.powerCooldowns[k]--;
+      }
       // Sentence countdown — one sim day passes
       for (let i = GS.inmates.length - 1; i >= 0; i--) {
         GS.inmates[i].soningstidIgjen--;
         if (GS.inmates[i].soningstidIgjen <= 0) {
           const cellId = GS.inmates[i].cellId;
+          addDeparted(GS.inmates[i], 'Slapp ut etter endt soning');
           GS.inmates.splice(i, 1);
           const fresh = new Inmate(cellId);
           fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
@@ -2042,6 +2435,14 @@ function tick() {
       const NIGHT_TEMP = { calm: 1.25, normal: 1.0, aggressive: 0.70 };
       const factor = NIGHT_BASE[inm.isolationResponse] * NIGHT_TEMP[inm.temperament];
       delta = factor * inm.unrest;
+      // Floor sleeper: stress fra gulv-soving
+      if (inm.isFloorSleeper) {
+        delta += 0.03;
+      } else if (inm.cellId) {
+        // Cellekamerater i overfylt celle — svak effekt
+        const crowded = GS.inmates.some(x => x.cellId === inm.cellId && x.isFloorSleeper);
+        if (crowded) delta += 0.01;
+      }
     } else {
       let nearbyCount = 0;
       for (const other of GS.inmates) {
@@ -2157,8 +2558,11 @@ function tick() {
     }
     inm.unrest = Math.max(0, Math.min(100, inm.unrest + delta));
 
-    // energi: recharges at night, drains during gym, slow passive drain otherwise
-    if (isNight)           inm.energi = Math.min(100, inm.energi + 2.5);
+    // energi: recharges at night (full in bed, half on floor), drains during gym, slow passive drain otherwise
+    if (isNight) {
+      if (inm.sleepState === 'in_bed')        inm.energi = Math.min(100, inm.energi + 2.5);
+      else if (inm.sleepState === 'on_floor') inm.energi = Math.min(100, inm.energi + 1.25);
+    }
     else if (phase==='Formiddag') inm.energi = Math.max(0, inm.energi - 1.2);
     else                   inm.energi = Math.max(0, inm.energi - 0.3);
 
@@ -2189,6 +2593,22 @@ function tick() {
           // motstander borte (fx sendt til isolat fra annet sted) — bare rydd opp
           inm.inFight = false;
           inm.fightOpponent = null;
+          // Rydd opp spawn-seng-kamp hvis koblingen finnes: fall tilbake til floor sleeper i cellen
+          if (inm.bedChallengeVs !== null) {
+            inm.bedChallengeVs = null;
+            if (inm.cellId) {
+              inm.cellSlot       = null;
+              inm.isFloorSleeper = true;
+              const cellDef = getCellDef(inm.cellId);
+              if (cellDef) {
+                positionInmateAt(inm, cellDef.floorPos.x, cellDef.floorPos.y);
+              } else {
+                console.warn('[bedChallenge cleanup] Mangler cellDef for', inm.cellId);
+              }
+              addHistory(inm, `🛏 Måtte ta gulvet — motstanderen forsvant.`);
+              addPowerEvent('bed', `🛏 ${inm.name} måtte ta gulvet — kampen ble avbrutt.`);
+            }
+          }
         }
       }
     }
@@ -2240,6 +2660,8 @@ function tick() {
   GS.totalUnrest = GS.inmates.length
     ? GS.inmates.reduce((s,i) => s+i.unrest, 0) / GS.inmates.length
     : 0;
+
+  if (GS.gangwarFlashMs > 0) GS.gangwarFlashMs = Math.max(0, GS.gangwarFlashMs - TICK_MS);
 }
 
 // ================================================================
@@ -3285,6 +3707,11 @@ function render() {
   renderGuards();
   renderStaff();
   renderTint();
+  if (GS.gangwarFlashMs > 0) {
+    const a = Math.min(0.35, GS.gangwarFlashMs / 600 * 0.35);
+    ctx.fillStyle = `rgba(200,48,48,${a})`;
+    ctx.fillRect(0, 0, W, H);
+  }
 }
 
 // ================================================================
@@ -3412,7 +3839,9 @@ function updateCardContent(inm, isPinned) {
   const isLeader = GS._leaders && inm.groupId && GS._leaders[inm.groupId] === inm.id;
   const displayName = (isLeader ? '♛ ' : '') + inm.name;
   if (e.nameEl.textContent !== displayName) e.nameEl.textContent = displayName;
-  if (e.cellEl.textContent !== inm.cellId) e.cellEl.textContent = inm.cellId;
+  const cellCount = (GS._cellCounts && inm.cellId) ? (GS._cellCounts[inm.cellId] || 0) : 0;
+  const cellLabel = inm.cellId ? (cellCount >= 3 ? `${inm.cellId}*` : inm.cellId) : '–';
+  if (e.cellEl.textContent !== cellLabel) e.cellEl.textContent = cellLabel;
   const w = u2 + '%';
   if (e.barFill.style.width !== w) e.barFill.style.width = w;
   if (e.barFill.style.background !== fc) e.barFill.style.background = fc;
@@ -3434,6 +3863,10 @@ function updateCardContent(inm, isPinned) {
     sTxt = '💥';
     sTitle = 'Konflikt';
     sCol = '#e07040';
+  } else if (inm.isFloorSleeper) {
+    sTxt = '🛌';
+    sTitle = 'Sover på gulv';
+    sCol = '#b06838';
   }
   if (e.statusEl.textContent !== sTxt) e.statusEl.textContent = sTxt;
   if (e.statusEl.title !== sTitle) e.statusEl.title = sTitle;
@@ -3537,8 +3970,62 @@ function updateUI() {
   document.getElementById('s-workshop').textContent    = GS.stats.workshop;
   document.getElementById('s-disappeared').textContent = GS.stats.disappeared;
 
+  // Powers — cooldown labels + disabled state
+  document.querySelectorAll('.pwr').forEach(btn => {
+    const key = btn.dataset.pwr;
+    const cd  = GS.powerCooldowns[key] || 0;
+    btn.disabled = cd > 0;
+    const cdEl = btn.querySelector('.pwr-cd');
+    if (cdEl) cdEl.textContent = cd > 0 ? `${cd}d igjen` : 'klar';
+  });
+
+  // Topp-dog detection — logg ved endring
+  {
+    let topId = null, topResp = -1;
+    for (const inm of GS.inmates) {
+      if (inm.respekt > topResp) { topResp = inm.respekt; topId = inm.id; }
+    }
+    if (topId !== GS.topDogId && topResp > DOMINANT_THRESHOLD) {
+      const newTop = GS.inmates.find(i => i.id === topId);
+      if (GS.topDogId !== null && newTop) {
+        addPowerEvent('throne', `👑 ${newTop.name} er nå mektigst.`);
+      }
+      GS.topDogId = topId;
+    }
+  }
+
+  // Maktlogg render
+  const mlog = document.getElementById('maktlogg-list');
+  if (mlog) {
+    if (!GS.powerLog.length) {
+      mlog.innerHTML = '<div class="mlog" style="color:#444">Ingen hendelser.</div>';
+    } else {
+      mlog.innerHTML = GS.powerLog.map(e =>
+        `<div class="mlog ${e.kind}"><span class="mlog-day">D${e.day}</span><span>${e.text}</span></div>`
+      ).join('');
+    }
+  }
+
+  // Forsvunnet render
+  const dlog = document.getElementById('departed-list');
+  if (dlog && dlog.style.display !== 'none') {
+    if (!GS.departed.length) {
+      dlog.innerHTML = '<div class="mlog" style="color:#444">Ingen har forlatt fengselet.</div>';
+    } else {
+      dlog.innerHTML = GS.departed.map(d =>
+        `<div class="mlog"><span class="mlog-day">D${d.day}</span><span>${d.name} — ${d.reason}</span></div>`
+      ).join('');
+    }
+  }
+
   // Gjengledere beregnes én gang per UI-tick; leses av liste og detail-panel
   GS._leaders = computeLeaders();
+
+  // Celle-tellinger per UI-tick — brukt av lista for å vise overfylt-markør
+  GS._cellCounts = {};
+  for (const inm of GS.inmates) {
+    if (inm.cellId) GS._cellCounts[inm.cellId] = (GS._cellCounts[inm.cellId] || 0) + 1;
+  }
 
   // Inmate list — in-place render, filter og stabil sortering
   renderInmateList();
@@ -3557,6 +4044,7 @@ function updateUI() {
       ${sel.inFight ? `<div class="dr"><span class="dl">Status</span><span class="dv" style="color:#e05040">I kamp</span></div>` : ''}
       ${(!sel.inFight && sel.postFightRoom) ? `<div class="dr"><span class="dl">Status</span><span class="dv" style="color:#c8b460">${sel.postFightRoom === 'isolation' ? 'På isolatet' : sel.postFightRoom === 'counseling' ? 'På samtale' : 'I biblioteket'}</span></div>` : ''}
       <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>
+      ${sel.isFloorSleeper ? `<div class="dr"><span class="dl">Sengeplass</span><span class="dv" style="color:#b06838">Sover på gulv</span></div>` : ''}
       <div class="dr"><span class="dl">Isolat</span><span class="dv">${sel.isolatCount} ganger</span></div>
       <div class="dr"><span class="dl">Respekt</span><span class="dv">${sel.respekt} <span style="color:#889">(${respektLevelShort(sel.respekt)})</span>${GS._leaders && sel.groupId && GS._leaders[sel.groupId] === sel.id ? ' <span style="color:#c8b460">♛ Gjengleder</span>' : ''}</span></div>
       <div class="dr" style="margin-top:6px"><span class="dl">Personlighet</span></div>
@@ -3608,10 +4096,10 @@ function updateUI() {
 // ================================================================
 // CONTROLS
 // ================================================================
-document.querySelectorAll('.sb').forEach(btn => {
+document.querySelectorAll('.sb[data-s]').forEach(btn => {
   btn.addEventListener('click', () => {
     GS.speed = parseInt(btn.dataset.s);
-    document.querySelectorAll('.sb').forEach(b => b.classList.toggle('on', b===btn));
+    document.querySelectorAll('.sb[data-s]').forEach(b => b.classList.toggle('on', b===btn));
   });
 });
 
@@ -3635,6 +4123,41 @@ document.querySelectorAll('.pb').forEach(btn => {
       GS.inmates[i].setTargetZone(newZone, delay);
     }
   });
+});
+
+// Powers
+function triggerNewcomerPower() {
+  if (GS.powerCooldowns.newcomer > 0) return;
+  const newcomer = spawnNewcomer();
+  if (!newcomer) return;                  // alle fulle celler har floor sleeper; cooldown resettet i spawnNewcomer
+  GS.powerCooldowns.newcomer = 5;
+  GS.selectedId = newcomer.id;
+  addHistory(newcomer, `⚡ Ankom fengselet — ryktet til å være farlig.`);
+  addPowerEvent('arrival', `⚡ ${newcomer.name} ankom — beryktet.`);
+}
+function triggerGangwarPower() {
+  if (GS.powerCooldowns.gangwar > 0) return;
+  const counts = { A:0, B:0, C:0 };
+  for (const inm of GS.inmates) if (inm.groupId) counts[inm.groupId] = (counts[inm.groupId] || 0) + 1;
+  const top = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 2);
+  const g1 = top[0] && top[0][1] > 0 ? top[0][0] : null;
+  const g2 = top[1] && top[1][1] > 0 ? top[1][0] : null;
+  if (!g1 || !g2) return;
+  triggerGangWar(g1, g2);
+  GS.gangwarFlashMs = 600;
+  GS.powerCooldowns.gangwar = 5;
+}
+document.querySelector('[data-pwr="newcomer"]').addEventListener('click', triggerNewcomerPower);
+document.querySelector('[data-pwr="gangwar"]').addEventListener('click', triggerGangwarPower);
+
+// Forsvunnet-toggle
+document.getElementById('departed-toggle').addEventListener('click', () => {
+  const list = document.getElementById('departed-list');
+  const btn  = document.getElementById('departed-toggle');
+  const open = list.style.display === 'none';
+  list.style.display = open ? 'block' : 'none';
+  btn.textContent    = open ? 'Skjul' : 'Vis';
+  if (open) updateUI();
 });
 
 // Canvas — click to select inmate, mousemove to hover
@@ -3754,10 +4277,19 @@ function saveGame() {
       workshopCount: inm.workshopCount,
       lastWorkshopDay: inm.lastWorkshopDay,
       isBored: inm.isBored,
+      isFloorSleeper: inm.isFloorSleeper,
+      hasDominatedForBed: inm.hasDominatedForBed,
+      ambition: inm.ambition,
+      targetId: inm.targetId,
     })),
     guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi })),
     stats: { ...GS.stats },
     playerId: GS.playerId,
+    gangwarFlashMs: GS.gangwarFlashMs,
+    powerCooldowns: { ...GS.powerCooldowns },
+    powerLog: GS.powerLog,
+    topDogId: GS.topDogId,
+    departed: GS.departed,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
@@ -3771,6 +4303,12 @@ function loadGame() {
   GS.phaseTick = data.phaseTick; GS.speed = data.speed;
   GS.stats = Object.assign(defaultStats(), data.stats || {});
   GS.playerId = data.playerId ?? null;
+  GS.gangwarFlashMs = data.gangwarFlashMs ?? 0;
+  GS.powerCooldowns = Object.assign({ newcomer:0, gangwar:0 }, data.powerCooldowns || {});
+  delete GS.powerCooldowns.blackout;
+  GS.powerLog  = Array.isArray(data.powerLog) ? data.powerLog : [];
+  GS.topDogId  = data.topDogId ?? null;
+  GS.departed  = Array.isArray(data.departed) ? data.departed : [];
   GS.inmates = []; GS.guards = [];
   UID = 1;
   for (const d of data.inmates) {
@@ -3783,6 +4321,10 @@ function loadGame() {
     if (typeof inm.workshopCount !== 'number') inm.workshopCount = 0;
     if (inm.lastWorkshopDay === undefined) inm.lastWorkshopDay = null;
     if (typeof inm.isBored !== 'boolean') inm.isBored = false;
+    if (typeof inm.isFloorSleeper !== 'boolean')     inm.isFloorSleeper = false;
+    if (typeof inm.hasDominatedForBed !== 'boolean') inm.hasDominatedForBed = false;
+    if (inm.ambition !== 'take_over') inm.ambition = null;
+    if (typeof inm.targetId !== 'number') inm.targetId = null;
     inm._wasInWorkshop = inm.zone === 'workshop';
     if (typeof inm.respekt !== 'number') {
       inm.respekt = (typeof inm.ry === 'number') ? inm.ry : 0;
@@ -3809,9 +4351,10 @@ function loadGame() {
 // MENU / INIT
 // ================================================================
 function checkSaveExists() {
-  const has = !!localStorage.getItem(SAVE_KEY);
-  document.getElementById('btn-continue').disabled = !has;
-  document.getElementById('btn-load').disabled = !has;
+  const hasSave = !!localStorage.getItem(SAVE_KEY);
+  const hasActiveRound = GS.inmates.length > 0;
+  document.getElementById('btn-continue').disabled = !(hasSave || hasActiveRound);
+  document.getElementById('btn-load').disabled     = !hasSave;
 }
 
 function startGame(fromSave = false) {
@@ -3822,6 +4365,10 @@ function startGame(fromSave = false) {
     GS.day = 1; GS.phaseIndex = 0; GS.phaseTick = 0;
     GS.stats = defaultStats();
     GS.playerId = null;
+    GS.powerLog = [];
+    GS.topDogId = null;
+    GS.departed = [];
+    GS.powerCooldowns = { newcomer: 0, gangwar: 0 };
     GS.inmates = []; GS.guards = [];
     spawn();
     const initZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
@@ -3832,7 +4379,13 @@ function startGame(fromSave = false) {
 }
 
 document.getElementById('btn-new').addEventListener('click', () => startGame(false));
-document.getElementById('btn-continue').addEventListener('click', () => startGame(true));
+document.getElementById('btn-continue').addEventListener('click', () => {
+  if (GS.inmates.length > 0) {
+    document.getElementById('menu').style.display = 'none';
+  } else {
+    startGame(true);
+  }
+});
 document.getElementById('btn-load').addEventListener('click', () => startGame(true));
 document.getElementById('btn-save').addEventListener('click', saveGame);
 document.getElementById('btn-menu').addEventListener('click', () => {
