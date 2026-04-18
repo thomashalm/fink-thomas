@@ -82,7 +82,7 @@ canvas {
 .ir-badge{ font-size:0.60rem; font-weight:700; letter-spacing:1px; margin-top:4px; }
 .ub { height:5px; background:#0e1116; border-radius:2px; overflow:hidden; }
 .uf { height:100%; border-radius:2px; transition:width 0.5s; }
-#detail { border-top:1px solid #1e2228; padding:11px 14px; background:#141820; max-height:210px; overflow-y:auto; flex-shrink:0; }
+#detail { border-top:1px solid #1e2228; padding:11px 14px; background:#141820; max-height:50vh; overflow-y:auto; flex-shrink:0; }
 #detail h4 { font-size:0.76rem; color:#c8b460; margin-bottom:6px; }
 .dr { display:flex; justify-content:space-between; font-size:0.73rem; margin:2px 0; }
 .dl { color:#445; }
@@ -108,6 +108,18 @@ canvas {
 .pb:hover { background:#1c2028; border-color:#445560; color:#99a; }
 .pb.on { background:#1e2030; border-color:#8870a0; color:#c0a0e0;
          box-shadow: 0 0 5px rgba(136,112,160,0.2); }
+#tabbar { display:flex; border-bottom:1px solid #1e2228; background:#141820; }
+.tb { flex:1; background:transparent; border:none;
+      border-bottom:2px solid transparent;
+      color:#667; padding:9px 4px 7px;
+      font-family:monospace; font-size:0.7rem;
+      letter-spacing:2px; text-transform:uppercase;
+      cursor:pointer;
+      transition: color 0.12s, border-color 0.12s, background 0.12s; }
+.tb:hover { color:#aaa; background:#181c22; }
+.tb.on { color:#c8b460; border-bottom-color:#c8b460; background:#181c22; }
+.tabpane { display:none; }
+.tabpane.on { display:flex; flex-direction:column; flex:1; min-height:0; }
 #menu {
   position:fixed; inset:0; background:#0a0c0e;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
@@ -152,29 +164,37 @@ canvas {
       </div>
     </div>
   </div>
-  <div class="panel">
-    <div class="stat-row"><span class="lbl">Total uro</span><span class="val" id="s-unrest">0%</span></div>
-    <div class="stat-row"><span class="lbl">Innsatte</span><span class="val" id="s-count">0</span></div>
-    <div class="stat-row"><span class="lbl">Vakter</span><span class="val" id="s-guards">0</span></div>
+  <div id="tabbar">
+    <button class="tb on" data-tab="innsatte">Innsatte</button>
+    <button class="tb"    data-tab="oversikt">Oversikt</button>
   </div>
-  <div class="panel">
-    <div class="stat-row"><span class="lbl">Kamper</span><span class="val" id="s-fights">0</span></div>
-    <div class="stat-row"><span class="lbl">Vennskap</span><span class="val" id="s-friendships">0</span></div>
-    <div class="stat-row"><span class="lbl">Isolat</span><span class="val" id="s-isolation">0</span></div>
-    <div class="stat-row"><span class="lbl">Samtaler</span><span class="val" id="s-counseling">0</span></div>
-    <div class="stat-row"><span class="lbl">Bibliotek</span><span class="val" id="s-library">0</span></div>
-    <div class="stat-row"><span class="lbl">Forsvunnet</span><span class="val" id="s-disappeared">0</span></div>
-  </div>
-  <div id="inmate-section">
-    <h3>Innsatte</h3>
-    <div id="gang-strip">
-      <div class="gs on" data-f="all"   title="Alle innsatte">Alle <span class="gs-count"></span></div>
-      <div class="gs"    data-f="gA"    title="Gjeng A"><span class="gs-dot" style="background:#c83030"></span>A <span class="gs-count"></span></div>
-      <div class="gs"    data-f="gB"    title="Gjeng B"><span class="gs-dot" style="background:#2858c8"></span>B <span class="gs-count"></span></div>
-      <div class="gs"    data-f="gC"    title="Gjeng C"><span class="gs-dot" style="background:#28a040"></span>C <span class="gs-count"></span></div>
-      <div class="gs"    data-f="gNone" title="Uten gjeng"><span class="gs-dot" style="background:#444;border:1px solid #667"></span>Ingen <span class="gs-count"></span></div>
+  <div class="tabpane" data-tab="oversikt">
+    <div class="panel">
+      <div class="stat-row"><span class="lbl">Total uro</span><span class="val" id="s-unrest">0%</span></div>
+      <div class="stat-row"><span class="lbl">Innsatte</span><span class="val" id="s-count">0</span></div>
+      <div class="stat-row"><span class="lbl">Vakter</span><span class="val" id="s-guards">0</span></div>
     </div>
-    <div id="ilist"></div>
+    <div class="panel">
+      <div class="stat-row"><span class="lbl">Kamper</span><span class="val" id="s-fights">0</span></div>
+      <div class="stat-row"><span class="lbl">Vennskap</span><span class="val" id="s-friendships">0</span></div>
+      <div class="stat-row"><span class="lbl">Isolat</span><span class="val" id="s-isolation">0</span></div>
+      <div class="stat-row"><span class="lbl">Samtaler</span><span class="val" id="s-counseling">0</span></div>
+      <div class="stat-row"><span class="lbl">Bibliotek</span><span class="val" id="s-library">0</span></div>
+      <div class="stat-row"><span class="lbl">Verksted</span><span class="val" id="s-workshop">0</span></div>
+      <div class="stat-row"><span class="lbl">Forsvunnet</span><span class="val" id="s-disappeared">0</span></div>
+    </div>
+  </div>
+  <div class="tabpane on" data-tab="innsatte">
+    <div id="inmate-section">
+      <div id="gang-strip">
+        <div class="gs on" data-f="all"   title="Alle innsatte">Alle <span class="gs-count"></span></div>
+        <div class="gs"    data-f="gA"    title="Gjeng A"><span class="gs-dot" style="background:#c83030"></span>A <span class="gs-count"></span></div>
+        <div class="gs"    data-f="gB"    title="Gjeng B"><span class="gs-dot" style="background:#2858c8"></span>B <span class="gs-count"></span></div>
+        <div class="gs"    data-f="gC"    title="Gjeng C"><span class="gs-dot" style="background:#28a040"></span>C <span class="gs-count"></span></div>
+        <div class="gs"    data-f="gNone" title="Uten gjeng"><span class="gs-dot" style="background:#444;border:1px solid #667"></span>Ingen <span class="gs-count"></span></div>
+      </div>
+      <div id="ilist"></div>
+    </div>
   </div>
   <div id="detail">
     <span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>
@@ -219,21 +239,41 @@ fitCanvas();
 // TILE DRAW FUNCTIONS
 // ================================================================
 function drawWall(ctx, px, py, T) {
-  ctx.fillStyle = '#363636';
+  // Base mursteinsfarge
+  ctx.fillStyle = '#3a3a3a';
   ctx.fillRect(px, py, T, T);
-  ctx.fillStyle = '#404040';
-  ctx.fillRect(px+2, py+2, T-4, T-4);
+  // Indre stein-flate
+  ctx.fillStyle = '#464646';
+  ctx.fillRect(px+1, py+1, T-2, T-2);
+
+  // Mursteinsmønster — to rader per tile, offset annenhver tile-rad
   const even = Math.floor(py/T) % 2 === 0;
+  const midY = py + T/2;
+  const offX = even ? T/2 : 0;
+
+  // Mortar-linjer (mørke)
   ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(px, py+T/2); ctx.lineTo(px+T, py+T/2);
-  const bx = px + (even ? T/2 : 0);
-  ctx.moveTo(bx, py);       ctx.lineTo(bx, py+T/2);
-  ctx.moveTo(bx+T/2, py+T/2); ctx.lineTo(bx+T/2, py+T);
+  ctx.moveTo(px, midY); ctx.lineTo(px+T, midY);
+  ctx.moveTo(px + offX, py);             ctx.lineTo(px + offX, midY);
+  ctx.moveTo(px + offX + T/2, midY);     ctx.lineTo(px + offX + T/2, py + T);
   ctx.stroke();
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+
+  // Bevel — lys topp/venstre-kant gir 3D
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  ctx.fillRect(px, py, T, 1.5);
+  ctx.fillRect(px, py, 1.5, T);
+
+  // Bevel — mørk bunn/høyre-kant
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fillRect(px+T-2, py, 2, T);
   ctx.fillRect(px, py+T-2, T, 2);
+
+  // Sparse slitasje: svak horisontal stripe på ~3% av veggene.
+  if (((px/T*11 + py/T*17) % 33) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.07)';
+    ctx.fillRect(px + 4, py + 7 + ((px+py)/T|0)%6, T - 8, 1.2);
+  }
 }
 
 function drawFloor(ctx, px, py, T) {
@@ -242,6 +282,14 @@ function drawFloor(ctx, px, py, T) {
   ctx.fillRect(px, py, T, T);
   ctx.strokeStyle = '#3e3e3e'; ctx.lineWidth = 0.5;
   ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
+  if (((px/T*17 + py/T*23) % 31) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
 }
 
 function drawCellFloor(ctx, px, py, T) {
@@ -250,6 +298,14 @@ function drawCellFloor(ctx, px, py, T) {
   ctx.fillRect(px, py, T, T);
   ctx.strokeStyle = '#343c4c'; ctx.lineWidth = 0.5;
   ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
+  if (((px/T*17 + py/T*23) % 31) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
 }
 
 function drawDoor(ctx, px, py, T) {
@@ -307,10 +363,17 @@ function drawFence(ctx, px, py, T) {
 
 function drawYard(ctx, px, py, T) {
   const v = (px/T*5 + py/T*11) % 4;
-  ctx.fillStyle = v<1?'#4e5638':v<2?'#48503400'.slice(0,9)+'484':v<3?'#4c5440':'#465038';
-  ctx.fillStyle = v<1?'#4e5638':v<2?'#485034':v<3?'#4c5440':'#465038';
+  ctx.fillStyle = v<1?'#56603a':v<2?'#505a36':v<3?'#586438':'#4e5a36';
   ctx.fillRect(px, py, T, T);
   if (v>3.2) { ctx.fillStyle='rgba(80,60,20,0.1)'; ctx.fillRect(px+3,py+3,T-6,T-6); }
+  if (((px/T*17 + py/T*23) % 31) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
 }
 
 function drawTable(ctx, px, py, T) {
@@ -326,10 +389,18 @@ function drawTable(ctx, px, py, T) {
 
 function drawGymFloor(ctx, px, py, T) {
   const v = (px/T*5 + py/T*7) % 3;
-  ctx.fillStyle = v<1 ? '#3a2828' : v<2 ? '#382626' : '#362424';
+  ctx.fillStyle = v<1 ? '#4a2626' : v<2 ? '#452424' : '#402020';
   ctx.fillRect(px, py, T, T);
   ctx.strokeStyle = '#2a1a1a'; ctx.lineWidth = 0.5;
   ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
+  if (((px/T*17 + py/T*23) % 31) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
 }
 
 function drawShowerFloor(ctx, px, py, T) {
@@ -340,6 +411,14 @@ function drawShowerFloor(ctx, px, py, T) {
   ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
   ctx.fillStyle = 'rgba(120,170,240,0.10)';
   ctx.fillRect(px+2, py+2, T-4, T-4);
+  if (((px/T*17 + py/T*23) % 31) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
 }
 
 function drawShowerHead(ctx, px, py, T) {
@@ -373,21 +452,58 @@ function drawEquipment(ctx, px, py, T) {
 }
 
 function drawIsoFloor(ctx, px, py, T) {
-  const pal = ['#2a3240','#252c38','#1f2530'];
+  const pal = ['#222c44','#1e2a40','#1a2538'];
   ctx.fillStyle = pal[((px/T|0)+(py/T|0))%3];
   ctx.fillRect(px, py, T, T);
   ctx.fillStyle = 'rgba(40,50,64,0.4)';
   ctx.fillRect(px, py, T, 1);
+  if (((px/T*17 + py/T*23) % 31) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
 }
 function drawCounselFloor(ctx, px, py, T) {
-  const pal = ['#3a5256','#365054','#324c50'];
+  const pal = ['#2e6068','#2a5a62','#28525a'];
   ctx.fillStyle = pal[((px/T|0)+(py/T|0))%3];
   ctx.fillRect(px, py, T, T);
+  if (((px/T*17 + py/T*23) % 31) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
 }
 function drawLibraryFloor(ctx, px, py, T) {
-  const pal = ['#5a4028','#553c24','#4e381f'];
+  const pal = ['#6b4820','#624022','#583a1c'];
   ctx.fillStyle = pal[((px/T|0)+(py/T|0))%3];
   ctx.fillRect(px, py, T, T);
+  if (((px/T*17 + py/T*23) % 31) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
+}
+function drawWorkshopFloor(ctx, px, py, T) {
+  const pal = ['#6a5a32','#64552e','#5c4e28'];
+  ctx.fillStyle = pal[((px/T|0)+(py/T|0))%3];
+  ctx.fillRect(px, py, T, T);
+  if (((px/T*17 + py/T*23) % 23) < 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 5, 3);
+  }
+  if (((px/T*7 + py/T*19) % 41) < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  }
 }
 
 const DRAWERS = {
@@ -397,6 +513,7 @@ const DRAWERS = {
   gym_floor: drawGymFloor, shower_floor: drawShowerFloor, equipment: drawEquipment,
   shower_head: drawShowerHead,
   iso_floor: drawIsoFloor, counsel_floor: drawCounselFloor, library_floor: drawLibraryFloor,
+  workshop_floor: drawWorkshopFloor,
 };
 
 // ================================================================
@@ -523,6 +640,11 @@ function buildMap() {
     for (let x=24; x<=32; x++) M[y][x] = mk('library_floor', true, 'library');
   M[24][28] = mk('door', true, 'library');
 
+  // Verksted: cols 33–42
+  for (let y=24; y<=25; y++)
+    for (let x=33; x<=42; x++) M[y][x] = mk('workshop_floor', true, 'workshop');
+  M[24][38] = mk('door', true, 'workshop');
+
   return M;
 }
 
@@ -598,17 +720,19 @@ const GS = {
   selectedId: null,
   hoverId:    null,
   listFilter: 'all',    // 'all' | 'iso' | 'con' | 'hot'
+  playerId:   null,     // spiller-karakter — settes av fremtidig spiller-feature
   stats: {
     isolation:    0,
     counseling:   0,
     library:      0,
+    workshop:     0,
     fights:       0,
     friendships:  0,
     disappeared:  0,
   },
 };
 function defaultStats() {
-  return { isolation:0, counseling:0, library:0, fights:0, friendships:0, disappeared:0 };
+  return { isolation:0, counseling:0, library:0, workshop:0, fights:0, friendships:0, disappeared:0 };
 }
 
 const HISTORY_MAX = 8;
@@ -719,6 +843,10 @@ const SPOTS = (() => {
   // Bibliotek: 8 spots
   [[25,24],[26,25],[27,24],[28,25],[29,24],[30,25],[31,24],[32,25]].forEach(([x,y],i) => {
     spots[`library_${i}`] = { id:`library_${i}`, zone:'library', px:x*TILE+TILE/2, py:y*TILE+TILE/2 };
+  });
+  // Verksted: 5 spots foran benkene
+  [[34,25],[36,25],[39,25],[41,25],[37,24]].forEach(([x,y],i) => {
+    spots[`workshop_${i}`] = { id:`workshop_${i}`, zone:'workshop', px:x*TILE+TILE/2, py:y*TILE+TILE/2 };
   });
 
   return spots;
@@ -831,6 +959,7 @@ function fallbackPos(zone, cellDef, groupId = null) {
   if (zone === 'isolation')  return { px: 4*TILE+TILE/2,  py: 25*TILE+TILE/2, id: null };
   if (zone === 'counseling') return { px: 15*TILE+TILE/2, py: 25*TILE+TILE/2, id: null };
   if (zone === 'library')    return { px: 28*TILE+TILE/2, py: 25*TILE+TILE/2, id: null };
+  if (zone === 'workshop')   return { px: 37*TILE+TILE/2, py: 25*TILE+TILE/2, id: null };
   return { px: rInt(9,35)*TILE+TILE/2, py: rInt(12,23)*TILE+TILE/2, id: null };
 }
 
@@ -1148,7 +1277,11 @@ class Inmate {
     this.conflictCount    = 0;    // teller konflikter siden siste isolat-slutt
     this.isolationTicks   = 0;    // gjenværende isolat-tid i ticks (0 = fri)
     this.isolatCount      = 0;    // totalt antall ganger i isolat
-    this.ry               = 0;    // omdømme — +2 kamp-seier, +1 venn i egen gjeng, -3 isolat
+    this.respekt          = 0;    // omdømme — +2 kamp-seier, +1 venn i egen gjeng, -3 isolat
+    this.fightsWon        = 0;
+    this.fightsLost       = 0;
+    this.friendshipsMade  = 0;    // kumulativ — teller alle venn-bindinger, på tvers av gjeng
+    this.counselingCount  = 0;
 
     // Fight state (v0.9.1 kamp-logikk)
     this.strength         = 40 + Math.random() * 40;   // 40–80
@@ -1170,6 +1303,12 @@ class Inmate {
     // Frivillige biblioteksbesøk (v0.9.6) — teller kun opp når inm har gått dit av eget valg
     this.libraryVisits  = 0;
     this._wasInLibrary  = false;
+
+    // Verksted — hverdagsrutine (iterasjon 1)
+    this.workshopCount   = 0;
+    this.lastWorkshopDay = null;
+    this.isBored         = false;
+    this._wasInWorkshop  = false;
 
     // Starting position
     const def = getCellDef(cellId);
@@ -1219,6 +1358,7 @@ class Inmate {
       else if (z === 'isolation'  ) this.zone = 'isolation';
       else if (z === 'counseling' ) this.zone = 'counseling';
       else if (z === 'library'    ) this.zone = 'library';
+      else if (z === 'workshop'   ) this.zone = 'workshop';
       else                          this.zone = 'corridor';
     }
     this.targetZone  = zone;
@@ -1448,7 +1588,7 @@ function spawn() {
   assignIdols();
 }
 
-// Gjengleder per A/B/C: høyest ry → høyest strength → lavest id.
+// Gjengleder per A/B/C: høyest respekt → høyest strength → lavest id.
 function computeLeaders() {
   const leaders = {};
   for (const gang of ['A','B','C']) {
@@ -1456,8 +1596,8 @@ function computeLeaders() {
     for (const inm of GS.inmates) {
       if (inm.groupId !== gang) continue;
       if (!best) { best = inm; continue; }
-      if (inm.ry > best.ry) best = inm;
-      else if (inm.ry === best.ry) {
+      if (inm.respekt > best.respekt) best = inm;
+      else if (inm.respekt === best.respekt) {
         if (inm.strength > best.strength) best = inm;
         else if (inm.strength === best.strength && inm.id < best.id) best = inm;
       }
@@ -1487,6 +1627,7 @@ function removeInmate(i) {
   releaseSpot(removedId);
   if (GS.selectedId === removedId) GS.selectedId = null;
   if (GS.hoverId === removedId) GS.hoverId = null;
+  if (GS.playerId === removedId) GS.playerId = null;
 
   for (const other of GS.inmates) {
     if (other === inm) continue;
@@ -1522,7 +1663,7 @@ const CONFLICT_COOLDOWN   = 12000;        // 12s før samme innsatt kan igjen
 const FLASH_DURATION      = 1800;         // 1.8s visuell markør
 
 // stressTolerance → unrest-terskel der innsatt er "på randen"
-const STRESS_THRESHOLD = { low: 35, medium: 50, high: 65 };
+const STRESS_THRESHOLD = { low: 25, medium: 40, high: 55 };
 // temperament → sjanse for å TRIGGE når alle andre krav er møtt
 const AGGRESSION_ROLL  = { calm: 0.10, normal: 0.45, aggressive: 0.80 };
 
@@ -1568,9 +1709,10 @@ function sendToRoomAfterFight(inm) {
   if (room === 'isolation')      GS.stats.isolation++;
   else if (room === 'counseling') GS.stats.counseling++;
   else if (room === 'library')    GS.stats.library++;
+  if (room === 'counseling') inm.counselingCount++;
   if (room === 'isolation') {
     inm.isolatCount++;
-    inm.ry              -= 3;
+    inm.respekt         -= 3;
     inm.soningstidIgjen  += 1;
     inm.soningstidTotalt += 1;
   }
@@ -1665,7 +1807,9 @@ function resolveFight(a, b) {
 
   // Vinner: litt lavere uro, ingen skade
   winner.unrest = Math.max(0, winner.unrest - 5);
-  winner.ry += 2;
+  winner.respekt += 2;
+  winner.fightsWon++;
+  loser.fightsLost++;
 
   // Rydd opp kamp-flagg på begge
   a.inFight = b.inFight = false;
@@ -1710,12 +1854,6 @@ function runConflictCheck() {
       if (b.conflictCooldown > 0) continue;
       if (a.groupId && b.groupId === a.groupId) continue;       // rivaler = annen gjeng (skippes kun for gjeng-medlem-par)
       if (b.id === a.friendId) continue;                        // ikke angrip venn
-      let bThresh = STRESS_THRESHOLD[b.stressTolerance];
-      if (b.kvirk === 'fanatisk' && b.idolId != null) {
-        const bIdol = GS.inmates.find(x => x.id === b.idolId);
-        if (bIdol && bIdol.inConflict) bThresh -= 15;
-      }
-      if (b.unrest < bThresh) continue;
       if (b.isBeingIntervened) continue;
       if (b.zone === 'cell') continue;
 
@@ -1772,9 +1910,11 @@ function runFriendFormation() {
         a.friendId = b.id;
         b.friendId = a.id;
         GS.stats.friendships++;
+        a.friendshipsMade++;
+        b.friendshipsMade++;
         if (a.groupId && a.groupId === b.groupId) {
-          a.ry += 1;
-          b.ry += 1;
+          a.respekt += 1;
+          b.respekt += 1;
         }
         addHistory(a, `Ble venn med ${b.name}`);
         addHistory(b, `Ble venn med ${a.name}`);
@@ -1792,6 +1932,14 @@ function libraryHasSpot() {
   return used < 5;
 }
 
+// Speiler libraryHasSpot — maks 5 innsatte på verkstedet
+function workshopHasSpot() {
+  const used = GS.inmates.filter(i =>
+    i.zone === 'workshop' || i.targetZone === 'workshop' || i.pendingZone === 'workshop'
+  ).length;
+  return used < 5;
+}
+
 // Velger aktivitet per fase — enkel prioritering på temperament/sosial/stress
 function chooseActivity(inm, phase) {
   if (phase === 'Natt') return 'ingen';
@@ -1803,8 +1951,12 @@ function chooseActivity(inm, phase) {
      inm.stressTolerance === 'low' ||
      inm.kvirk === 'nervøs' ||
      inm.kvirk === 'paranoid');
+  const wantsWorkshop =
+    inm.temperament !== 'aggressive' &&
+    (inm.energi < 60 || inm.kvirk === 'nervøs' || inm.kvirk === 'paranoid');
   if (phase === 'Formiddag') {
     if (inm.temperament === 'aggressive' || inm.energi > 70) return 'trening';
+    if (wantsWorkshop && workshopHasSpot()) return 'arbeid';
     if (wantsToRead) return 'lesing';
     return 'sosial';
   }
@@ -1839,6 +1991,8 @@ function tick() {
     const newPhase = PHASES[GS.phaseIndex];
     for (const inm of GS.inmates) {
       inm.aktivitet = chooseActivity(inm, newPhase);
+      // Oppdater kjedelig-flagg ved fase-bytte (verksted-deprivasjon)
+      inm.isBored = (GS.day - (inm.lastWorkshopDay ?? GS.day)) > 5;
     }
     const defaultZone = PHASE_ZONE[newPhase];
     for (let i = 0; i < GS.inmates.length; i++) {
@@ -1846,6 +2000,9 @@ function tick() {
       let targetZone = defaultZone;
       if (GS.inmates[i].aktivitet === 'lesing' && libraryHasSpot()) {
         targetZone = 'library';
+      }
+      if (GS.inmates[i].aktivitet === 'arbeid' && workshopHasSpot()) {
+        targetZone = 'workshop';
       }
       const delay = i * 350 + Math.random() * 200;
       GS.inmates[i].setTargetZone(targetZone, delay);
@@ -1945,9 +2102,12 @@ function tick() {
         case 'trening':  delta -= 0.30; inm.energi = Math.max(0, inm.energi - 0.5); break;
         case 'sosial':   delta -= 0.15; break;
         case 'lesing':   delta -= 0.40; break;
+        case 'arbeid':   delta -= 0.35; inm.energi = Math.max(0, inm.energi - 0.15); break;
         case 'dusj':     delta += 0.10; break;
         case 'samling':  delta -= 0.20; break;
       }
+      // Kjedelig-drift: innsatte som ikke har vært i verksted på 5+ dager
+      if (inm.isBored) delta += 0.005;
       // Relasjons-effekter (v0.9.4)
       if (inm.friendId != null) {
         const friend = GS.inmates.find(x => x.id === inm.friendId);
@@ -2046,6 +2206,23 @@ function tick() {
     inm._wasInLibrary = true;
   }
 
+  // Tell verksted-besøk (kant-detektor ved ankomst) — gir respekt + historikk
+  for (const inm of GS.inmates) {
+    if (inm.zone !== 'workshop') {
+      inm._wasInWorkshop = false;
+      continue;
+    }
+    if (!inm._wasInWorkshop) {
+      inm.workshopCount++;
+      inm.lastWorkshopDay = GS.day;
+      inm.isBored = false;
+      inm.respekt += 1;
+      GS.stats.workshop++;
+      addHistory(inm, 'Jobbet i verksted.');
+    }
+    inm._wasInWorkshop = true;
+  }
+
   // Stakes: innsatte med health <= 0 fjernes og erstattes
   for (let i = GS.inmates.length - 1; i >= 0; i--) {
     if (GS.inmates[i].health <= 0) removeInmate(i);
@@ -2060,11 +2237,20 @@ function tick() {
 // RENDERER
 // ================================================================
 const PHASE_TINT = {
-  'Morgen':      'rgba(255,180,60,0.025)',
-  'Formiddag':   'rgba(80,40,20,0.02)',
+  'Morgen':      'rgba(255,160,80,0.10)',
+  'Formiddag':   'rgba(255,240,200,0.04)',
   'Ettermiddag': null,
-  'Kveld':       'rgba(40,60,120,0.03)',
-  'Natt':        'rgba(0,10,40,0.12)',
+  'Kveld':       'rgba(30,40,90,0.22)',
+  'Natt':        'rgba(0,10,40,0.38)',
+};
+
+// Hvor sterkt lampene (og yard-poles) lyser per fase. 0 = av, 1 = full.
+const PHASE_LAMP_GLOW = {
+  'Morgen':      0.15,
+  'Formiddag':   0.0,
+  'Ettermiddag': 0.0,
+  'Kveld':       0.9,
+  'Natt':        1.0,
 };
 
 const ZONE_LBL = {
@@ -2072,6 +2258,7 @@ const ZONE_LBL = {
   corridor:'Korridor', center:'Korridor',
   gym:'Treningsrom', shower:'Dusj',
   isolation:'Isolat', counseling:'Samtalerom', library:'Bibliotek',
+  workshop:'Verksted',
 };
 
 /// Cell regions: [leftCol, topRow, widthTiles, heightTiles] for each of the 8 cells
@@ -2101,21 +2288,156 @@ function renderLabels() {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(255,255,255,0.08)';
   ctx.font = `${TILE*0.5|0}px monospace`;
-  ctx.fillText('UTEGÅRD',  21.5*TILE, 2.5*TILE);
-  ctx.fillText('KANTINE',  21.5*TILE, 6.5*TILE);
+  ctx.fillText('🌳 UTEGÅRD',  21.5*TILE, 2.5*TILE);
+  ctx.fillText('🍴 KANTINE',  21.5*TILE, 6.5*TILE);
   ctx.fillStyle = 'rgba(255,255,255,0.05)';
   ctx.font = `${TILE*0.4|0}px monospace`;
-  ctx.fillText('GYM',     15*TILE,   19*TILE);
-  ctx.fillText('DUSJ',    29*TILE,   19*TILE);
-  ctx.fillText('CELLE',   4.5*TILE,  16*TILE);
-  ctx.fillText('CELLE',   39.5*TILE, 16*TILE);
-  ctx.fillText('ISOLAT',     4.5*TILE,  24.5*TILE);
-  ctx.fillText('SAMTALE',   15.5*TILE,  24.5*TILE);
-  ctx.fillText('BIBLIOTEK', 28.5*TILE,  24.5*TILE);
+  ctx.fillText('🏋 GYM',     15*TILE,   19*TILE);
+  ctx.fillText('🚿 DUSJ',    29*TILE,   19*TILE);
+  ctx.fillText('🛏 CELLE',   4.5*TILE,  16*TILE);
+  ctx.fillText('🛏 CELLE',   39.5*TILE, 16*TILE);
+  ctx.fillText('🔒 ISOLAT',     4.5*TILE,  24.5*TILE);
+  ctx.fillText('💬 SAMTALE',   15.5*TILE,  24.5*TILE);
+  ctx.fillText('📚 BIBLIOTEK', 28.5*TILE,  24.5*TILE);
+  ctx.fillText('🔧 VERKSTED',  37.5*TILE,  24.5*TILE);
   ctx.restore();
 }
 
 const GANG_COLOR = { A: '#c83030', B: '#2858c8', C: '#28a040' };
+
+function drawShadow(x, y, w) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + TILE * 0.22, w, w * 0.35, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Statisk staff (kun visuell). Tegnes når aktivt for fasens zone.
+const STAFF_POSITIONS = [
+  // Bak kantine-disken, i gapet mellom venstre og høyre bord-rad.
+  { x: 19.5*TILE, y: 5.3*TILE, role: 'cook', activeWhenZone: 'cafeteria' },
+  { x: 22.5*TILE, y: 5.3*TILE, role: 'cook', activeWhenZone: 'cafeteria' },
+];
+
+// Statisk dekor (rent visuelt — påvirker ikke pathfinding).
+// Plassert langs vegger / i lavtrafikk-områder for å minimere overlapp med innsatte.
+const STATIC_DECOR = [
+  // Bibliotek — bokhyller langs nordvegg (rad 24), unngår dør (col 28) med buffer.
+  { type: 'bookshelf', x: 24*TILE, y: 24*TILE },
+  { type: 'bookshelf', x: 25*TILE, y: 24*TILE },
+  { type: 'bookshelf', x: 26*TILE, y: 24*TILE },
+  { type: 'bookshelf', x: 30*TILE, y: 24*TILE },
+  { type: 'bookshelf', x: 31*TILE, y: 24*TILE },
+  { type: 'bookshelf', x: 32*TILE, y: 24*TILE },
+
+  // Samtalerom — møbler langs sør- og østvegg (dør er i nord, så holder midten klar).
+  { type: 'sofa',     x: 12*TILE, y: 25*TILE + 8, w: 2*TILE },
+  { type: 'lowtable', x: 14*TILE + 4, y: 25*TILE + 6 },
+  { type: 'armchair', x: 17*TILE + 2, y: 25*TILE + 6 },
+
+  // Kantine — serveringsdisk i gapet mellom bord-radene, sør for kokkene.
+  { type: 'counter', x: 19*TILE, y: 5.6*TILE, w: 2*TILE },
+  { type: 'counter', x: 22*TILE, y: 5.6*TILE, w: 2*TILE },
+
+  // Tak-lamper — vertikal korridor (col 21).
+  { type: 'lamp', x: 21.5*TILE, y: 7*TILE },
+  { type: 'lamp', x: 21.5*TILE, y: 11*TILE },
+  { type: 'lamp', x: 21.5*TILE, y: 15*TILE },
+  { type: 'lamp', x: 21.5*TILE, y: 19*TILE },
+  // Tak-lamper — horisontal korridor (row 12).
+  { type: 'lamp', x: 9.5*TILE, y: 12.5*TILE },
+  { type: 'lamp', x: 15.5*TILE, y: 12.5*TILE },
+  { type: 'lamp', x: 27.5*TILE, y: 12.5*TILE },
+  { type: 'lamp', x: 33.5*TILE, y: 12.5*TILE },
+  // Tak-lamper — indre korridorer (col 9 og col 35).
+  { type: 'lamp', x: 9.5*TILE, y: 18*TILE },
+  { type: 'lamp', x: 35.5*TILE, y: 18*TILE },
+  // Tak-lamper — sentrale rom.
+  { type: 'lamp', x: 10*TILE, y: 5.3*TILE },     // kantine venstre
+  { type: 'lamp', x: 32*TILE, y: 5.3*TILE },     // kantine høyre
+  { type: 'lamp', x: 28*TILE, y: 25*TILE },      // bibliotek sentrum
+  { type: 'lamp', x: 15.5*TILE, y: 24.5*TILE },  // samtalerom sentrum
+
+  // ── Vinduer på yttervegg (overlay på wall-tiles) ────────────────
+  // Vestvegg (col 0): langs celler og kantine
+  { type: 'window', x: 0,        y: 5*TILE },
+  { type: 'window', x: 0,        y: 10*TILE },
+  { type: 'window', x: 0,        y: 14*TILE },
+  { type: 'window', x: 0,        y: 18*TILE },
+  { type: 'window', x: 0,        y: 22*TILE },
+  // Østvegg (col 43): samme mønster speilvendt
+  { type: 'window', x: 43*TILE,  y: 5*TILE },
+  { type: 'window', x: 43*TILE,  y: 10*TILE },
+  { type: 'window', x: 43*TILE,  y: 14*TILE },
+  { type: 'window', x: 43*TILE,  y: 18*TILE },
+  { type: 'window', x: 43*TILE,  y: 22*TILE },
+  // Sørvegg (row 25): mellom de nye rommene
+  { type: 'window', x: 9*TILE,   y: 25*TILE },
+  { type: 'window', x: 20*TILE,  y: 25*TILE },
+  { type: 'window', x: 34*TILE,  y: 25*TILE },
+
+  // ── Isolat-møblering (cols 2–6, rows 24–25) ─────────────────────
+  { type: 'isoBunk',  x: 2*TILE, y: 24*TILE },   // seng nord-vest
+  { type: 'isoStool', x: 3.5*TILE, y: 25.4*TILE }, // krakk midt
+  { type: 'isoDrain', x: 5.5*TILE, y: 25.5*TILE }, // sluk sør-øst
+
+  // ── Gym-utstyr (cols 10–20, rows 17–21) ─────────────────────────
+  // Unngår equipment-tiles på cols 11,15,16,19 og rows 17,19,21.
+  { type: 'weightRack', x: 17*TILE, y: 18*TILE }, // col 17 row 18 floor
+  { type: 'gymBench',   x: 13*TILE, y: 20*TILE }, // col 13 row 20 floor
+  { type: 'mirror',     x: 18*TILE, y: 20*TILE }, // col 18 row 20 floor
+
+  // ── Kantine-brett (fase-betinget: kun under måltider) ───────────
+  { type: 'tray', x: 5*TILE,  y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
+  { type: 'tray', x: 9*TILE,  y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
+  { type: 'tray', x: 14*TILE, y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
+  { type: 'tray', x: 17*TILE, y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
+  { type: 'tray', x: 24*TILE, y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
+  { type: 'tray', x: 28*TILE, y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
+  { type: 'tray', x: 33*TILE, y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
+  { type: 'tray', x: 36*TILE, y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
+
+  // ── Korridor-skilter ───────────────────────────────────────────
+  // Exit-skilter over dører / korridor-overganger
+  { type: 'exitSign', x: 9*TILE,  y: 8*TILE  },  // over venstre kantine-inngang
+  { type: 'exitSign', x: 35*TILE, y: 8*TILE  },  // over høyre kantine-inngang
+  { type: 'exitSign', x: 20*TILE, y: 4*TILE  },  // over yard-gate
+  // Klokker — sentrale kryss
+  { type: 'clock', x: 21.5*TILE, y: 8.2*TILE },   // over hub mot kantine
+  { type: 'clock', x: 21.5*TILE, y: 23.5*TILE },  // over hub mot sør-rommene
+  // Oppslagstavler — utenfor samtalerom og bibliotek (i korridor rad 23)
+  { type: 'bulletin', x: 14*TILE, y: 23.2*TILE },
+  { type: 'bulletin', x: 27*TILE, y: 23.2*TILE },
+  // Brannslukkere — ved korridor-hjørner
+  { type: 'extinguisher', x: 8.5*TILE,  y: 11.3*TILE },
+  { type: 'extinguisher', x: 35.5*TILE, y: 11.3*TILE },
+  { type: 'extinguisher', x: 6.5*TILE,  y: 23.2*TILE },
+  { type: 'extinguisher', x: 37.5*TILE, y: 23.2*TILE },
+
+  // ── Utegård (rows 2–3, cols 2–41) ──────────────────────────────
+  // Benker langs nord-gjerde
+  { type: 'benchWood', x: 4*TILE,  y: 2.3*TILE },
+  { type: 'benchWood', x: 35*TILE, y: 2.3*TILE },
+  // Basketkurv mot øst-fence
+  { type: 'basketHoop', x: 40*TILE, y: 2.5*TILE },
+  // Basketball-markeringer midt på gården
+  { type: 'yardMarkings', x: 20*TILE, y: 3*TILE },
+  // Lysmaster langs sør-gjerde (innenfor mur/yard)
+  { type: 'yardPole', x: 11*TILE, y: 3.8*TILE },
+  { type: 'yardPole', x: 30*TILE, y: 3.8*TILE },
+
+  // ── Verksted (cols 33–42, rows 24–25) ───────────────────────────
+  // Arbeidsbenker langs nordvegg (rad 24), unngår dør (col 38).
+  { type: 'workbench', x: 33*TILE, y: 24*TILE, w: 2*TILE },
+  { type: 'workbench', x: 35*TILE, y: 24*TILE, w: 2*TILE },
+  { type: 'workbench', x: 40*TILE, y: 24*TILE, w: 2*TILE },
+  // Tak-lampe sentrert
+  { type: 'lamp', x: 37.5*TILE, y: 24.7*TILE },
+  // Oppslagstavle i korridor rad 23 utenfor
+  { type: 'bulletin', x: 40*TILE, y: 23.2*TILE },
+];
 
 function renderInmates() {
   for (const inm of GS.inmates) {
@@ -2136,6 +2458,8 @@ function renderInmates() {
     const hx   = inm.px, hy = inm.py - base * 0.44;   // head centre
     const gangColor = GANG_COLOR[inm.groupId] || '#888';
     const inGang = inm.groupId != null;
+
+    drawShadow(inm.px, inm.py, base * 0.55);
 
     // Highlight-ring for matchende innsatte når et gjeng-filter er aktivt.
     // Tegnes først, havner bak alt annet. Bruker gjeng-farge (eller nøytralt grå for "Ingen").
@@ -2175,6 +2499,12 @@ function renderInmates() {
     // Body (clothing colour)
     ctx.fillStyle = look.clothColor;
     ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+    // Intern skygge (nedre halvdel) for volum
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI); ctx.fill();
+    // Outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
 
     // Gang chest symbol — kun for gjeng-medlemmer
     if (inGang) {
@@ -2194,6 +2524,12 @@ function renderInmates() {
     // Head (skin tone)
     ctx.fillStyle = look.skinTone;
     ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
+    // Intern skygge (nedre halvdel)
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI); ctx.fill();
+    // Outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.stroke();
 
     // Hair
     if (look.hairStyle > 0) {
@@ -2337,6 +2673,8 @@ function renderGuards() {
     const bx   = g.px, by = g.py + base * 0.18;
     const hx   = g.px, hy = g.py - base * 0.44;
 
+    drawShadow(g.px, g.py, base * 0.55);
+
     // Body — navy uniform
     ctx.fillStyle = '#1e3a6e';
     ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
@@ -2369,11 +2707,563 @@ function renderGuards() {
   }
 }
 
+function renderDecor() {
+  const T = TILE;
+  const phase = PHASES[GS.phaseIndex];
+  for (const d of STATIC_DECOR) {
+    if (d.activeWhenPhase && !d.activeWhenPhase.includes(phase)) continue;
+    switch (d.type) {
+      case 'bookshelf': {
+        // Anchor (x, y) = top-left of tile. Hyllen lener seg mot nordveggen.
+        const w = T - 4, h = T * 0.55;
+        const bx = d.x + 2, by = d.y + 1;
+        // Kabinettramme
+        ctx.fillStyle = '#3a2410';
+        ctx.fillRect(bx, by, w, h);
+        ctx.strokeStyle = '#5a3820'; ctx.lineWidth = 1;
+        ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+        // To hyller
+        const shelfY1 = by + h * 0.33, shelfY2 = by + h * 0.66;
+        ctx.fillStyle = '#2a1808';
+        ctx.fillRect(bx + 1, shelfY1 - 0.5, w - 2, 1);
+        ctx.fillRect(bx + 1, shelfY2 - 0.5, w - 2, 1);
+        // Bok-striper på hver hylle (4 per hylle)
+        const bookColors = ['#c8a040', '#a02828', '#3a6a3a', '#3050a0', '#883080'];
+        const bookW = (w - 4) / 4;
+        const seed = (d.x + d.y) | 0;
+        for (let row = 0; row < 3; row++) {
+          const y0 = by + 2 + row * (h * 0.33);
+          const y1 = y0 + h * 0.30;
+          for (let i = 0; i < 4; i++) {
+            const cIdx = (seed + row * 7 + i * 3) % bookColors.length;
+            ctx.fillStyle = bookColors[cIdx];
+            ctx.fillRect(bx + 2 + i * bookW, y0, bookW - 1, y1 - y0);
+          }
+        }
+        break;
+      }
+      case 'workbench': {
+        // Anchor (x, y) = top-left. Width via d.w (typisk 2*T). Lener seg mot nordveggen.
+        const w = d.w, h = T * 0.48;
+        const bx = d.x + 2, by = d.y + 2;
+        // Skygge under benken
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fillRect(bx + 2, by + h - 1, w - 8, 2);
+        // Ramme (mørk grå metall)
+        ctx.fillStyle = '#2e3238';
+        ctx.fillRect(bx, by, w - 4, h);
+        ctx.strokeStyle = '#1a1c20'; ctx.lineWidth = 0.8;
+        ctx.strokeRect(bx + 0.5, by + 0.5, w - 5, h - 1);
+        // Benkeplate (mørk tre)
+        ctx.fillStyle = '#4a3822';
+        ctx.fillRect(bx, by, w - 4, h * 0.35);
+        // Refleks på topplaten
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillRect(bx + 1, by + 1, w - 6, 1);
+        // Verktøy-silhouetter (små prikker i kontrastfarge)
+        const seed2 = ((d.x + d.y) | 0);
+        const toolColors = ['#c8b460', '#a04820', '#708080'];
+        for (let i = 0; i < 3; i++) {
+          ctx.fillStyle = toolColors[(seed2 + i) % 3];
+          ctx.fillRect(bx + 3 + i * 6, by + h * 0.55, 2, h * 0.30);
+        }
+        break;
+      }
+      case 'sofa': {
+        // Anchor (x, y) = top-left. Width via d.w.
+        const w = d.w, h = T * 0.45;
+        // Skygge
+        ctx.fillStyle = 'rgba(0,0,0,0.20)';
+        ctx.fillRect(d.x + 2, d.y + h - 1, w - 4, 3);
+        // Sofa-base (mørk turkis)
+        ctx.fillStyle = '#3a5258';
+        ctx.fillRect(d.x, d.y, w, h);
+        ctx.strokeStyle = '#2a3e44'; ctx.lineWidth = 1;
+        ctx.strokeRect(d.x + 0.5, d.y + 0.5, w - 1, h - 1);
+        // Rygg (øvre 1/3, lysere)
+        ctx.fillStyle = '#4a6268';
+        ctx.fillRect(d.x + 1, d.y + 1, w - 2, h * 0.32);
+        // Pute-skille (delelinje midt på sete)
+        ctx.strokeStyle = '#2a3e44'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(d.x + w/2, d.y + h * 0.4); ctx.lineTo(d.x + w/2, d.y + h - 2); ctx.stroke();
+        // Armlener
+        ctx.fillStyle = '#2e424a';
+        ctx.fillRect(d.x, d.y + h * 0.2, 3, h * 0.8);
+        ctx.fillRect(d.x + w - 3, d.y + h * 0.2, 3, h * 0.8);
+        break;
+      }
+      case 'armchair': {
+        const w = T * 0.7, h = T * 0.55;
+        ctx.fillStyle = 'rgba(0,0,0,0.20)';
+        ctx.fillRect(d.x + 2, d.y + h - 1, w - 4, 2.5);
+        ctx.fillStyle = '#3a5258';
+        ctx.fillRect(d.x, d.y, w, h);
+        ctx.strokeStyle = '#2a3e44'; ctx.lineWidth = 1;
+        ctx.strokeRect(d.x + 0.5, d.y + 0.5, w - 1, h - 1);
+        ctx.fillStyle = '#4a6268';
+        ctx.fillRect(d.x + 1, d.y + 1, w - 2, h * 0.35);
+        ctx.fillStyle = '#2e424a';
+        ctx.fillRect(d.x, d.y + h * 0.25, 2.5, h * 0.75);
+        ctx.fillRect(d.x + w - 2.5, d.y + h * 0.25, 2.5, h * 0.75);
+        break;
+      }
+      case 'lowtable': {
+        const w = T * 0.55, h = T * 0.30;
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(d.x + 1, d.y + h - 1, w - 2, 2);
+        ctx.fillStyle = '#4a3220';
+        ctx.fillRect(d.x, d.y, w, h);
+        ctx.strokeStyle = '#2a1d10'; ctx.lineWidth = 0.8;
+        ctx.strokeRect(d.x + 0.5, d.y + 0.5, w - 1, h - 1);
+        // Refleks-glimt
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(d.x + 1, d.y + 1, w - 2, 1.5);
+        break;
+      }
+      case 'counter': {
+        const w = d.w, h = T * 0.32;
+        // Skygge under
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillRect(d.x + 2, d.y + h, w - 4, 2);
+        // Disk-base (mørk)
+        ctx.fillStyle = '#2a2e34';
+        ctx.fillRect(d.x, d.y + 3, w, h - 3);
+        // Sølvgrå topp
+        ctx.fillStyle = '#a8b0b8';
+        ctx.fillRect(d.x, d.y, w, 4);
+        // Front-linje
+        ctx.strokeStyle = '#1a1d20'; ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(d.x, d.y + 4); ctx.lineTo(d.x + w, d.y + 4); ctx.stroke();
+        // Refleks
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(d.x + 1, d.y + 1, w - 2, 1);
+        break;
+      }
+      case 'lamp': {
+        // Deterministisk variasjon per lampe (stabil, ingen flimring).
+        const _s = Math.sin(d.x * 12.9898 + d.y * 78.233) * 43758.5453;
+        const _r = _s - Math.floor(_s);
+        const _sz = 0.85 + _r * 0.30;
+        const _a  = (0.82 + ((_r * 7) % 1) * 0.25) * 0.88;
+        const _R = T * 0.85 * _sz;
+        const grad = ctx.createRadialGradient(d.x, d.y, 1, d.x, d.y, _R);
+        grad.addColorStop(0, `rgba(255, 230, 150, ${0.18 * _a})`);
+        grad.addColorStop(0.6, `rgba(255, 220, 130, ${0.06 * _a})`);
+        grad.addColorStop(1, 'rgba(255, 220, 130, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(d.x, d.y, _R, 0, Math.PI*2); ctx.fill();
+        // Lyspære-kjerne
+        ctx.fillStyle = '#fff2b8';
+        ctx.beginPath(); ctx.arc(d.x, d.y, 2.2, 0, Math.PI*2); ctx.fill();
+        // Liten skygge-ring (lampe-fatning)
+        ctx.strokeStyle = 'rgba(40,30,10,0.4)'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.stroke();
+        break;
+      }
+      case 'window': {
+        const w = T * 0.72, h = T * 0.60;
+        const wx = d.x + (T - w) / 2;
+        const wy = d.y + (T - h) / 2;
+        // Karm (lysere stripe under)
+        ctx.fillStyle = '#7a6a58';
+        ctx.fillRect(wx - 2, wy + h - 1, w + 4, 3);
+        // Ramme (mørk)
+        ctx.fillStyle = '#1a1410';
+        ctx.fillRect(wx - 1, wy - 1, w + 2, h + 2);
+        // Glass (vertikal gradient)
+        const gg = ctx.createLinearGradient(wx, wy, wx, wy + h);
+        gg.addColorStop(0, '#6a8aa8');
+        gg.addColorStop(1, '#2e4664');
+        ctx.fillStyle = gg;
+        ctx.fillRect(wx, wy, w, h);
+        // Sprosser (kors)
+        ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(wx + w/2, wy); ctx.lineTo(wx + w/2, wy + h);
+        ctx.moveTo(wx, wy + h/2); ctx.lineTo(wx + w, wy + h/2);
+        ctx.stroke();
+        // Refleks-stripe
+        ctx.fillStyle = 'rgba(220,235,250,0.28)';
+        ctx.fillRect(wx + 2, wy + 2, 2.5, h - 5);
+        break;
+      }
+      case 'isoBunk': {
+        const w = T - 4, h = T * 0.55;
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fillRect(d.x + 3, d.y + h + 1, w - 2, 2);
+        // Betong-ramme
+        ctx.fillStyle = '#404448';
+        ctx.fillRect(d.x + 2, d.y + 2, w, h);
+        // Madrass
+        ctx.fillStyle = '#2c3848';
+        ctx.fillRect(d.x + 3, d.y + 3, w - 2, h - 4);
+        ctx.strokeStyle = '#1c2430'; ctx.lineWidth = 0.8;
+        ctx.strokeRect(d.x + 3, d.y + 3, w - 2, h - 4);
+        // Pute
+        ctx.fillStyle = '#5a6070';
+        ctx.fillRect(d.x + 4, d.y + 4, 6, h - 6);
+        break;
+      }
+      case 'isoStool': {
+        const r = T * 0.20;
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.beginPath();
+        ctx.ellipse(d.x, d.y + r * 0.5, r, r * 0.35, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#585858';
+        ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, Math.PI*2); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.beginPath(); ctx.arc(d.x - r * 0.25, d.y - r * 0.3, r * 0.4, 0, Math.PI*2); ctx.fill();
+        break;
+      }
+      case 'isoDrain': {
+        const r = T * 0.26;
+        ctx.fillStyle = '#181818';
+        ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, Math.PI*2); ctx.stroke();
+        ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        for (let i = -2; i <= 2; i++) {
+          ctx.moveTo(d.x - r * 0.75, d.y + i * r * 0.3);
+          ctx.lineTo(d.x + r * 0.75, d.y + i * r * 0.3);
+        }
+        ctx.stroke();
+        break;
+      }
+      case 'weightRack': {
+        const w = T * 0.9, h = T * 0.45;
+        const bx = d.x + (T - w) / 2, by = d.y + 3;
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillRect(bx, by + h, w, 2);
+        // Stativ-bein
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(bx, by, 2, h);
+        ctx.fillRect(bx + w - 2, by, 2, h);
+        // Stang (horisontal)
+        ctx.fillStyle = '#606060';
+        ctx.fillRect(bx - 2, by + 3, w + 4, 2);
+        // Skiver (vekter på hver side)
+        ctx.fillStyle = '#202020';
+        ctx.fillRect(bx - 2.5, by + 1, 2.5, 6);
+        ctx.fillRect(bx + w, by + 1, 2.5, 6);
+        ctx.fillStyle = '#c02020';
+        ctx.fillRect(bx - 2.2, by + 2, 1.8, 4);
+        ctx.fillRect(bx + w + 0.4, by + 2, 1.8, 4);
+        // Nedre hvile-stang
+        ctx.fillStyle = '#484848';
+        ctx.fillRect(bx - 1, by + h - 3, w + 2, 2);
+        break;
+      }
+      case 'gymBench': {
+        const w = T * 0.8, h = T * 0.32;
+        const bx = d.x + (T - w) / 2, by = d.y + (T - h) / 2;
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fillRect(bx + 1, by + h, w - 2, 2);
+        // Ramme
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(bx, by, w, h);
+        // Polstring
+        ctx.fillStyle = '#8a2a28';
+        ctx.fillRect(bx + 1, by + 1, w - 2, h - 3);
+        // Refleks
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        ctx.fillRect(bx + 1, by + 1, w - 2, 1);
+        // Bein
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(bx + 2, by + h - 2, 2, 3);
+        ctx.fillRect(bx + w - 4, by + h - 2, 2, 3);
+        break;
+      }
+      case 'mirror': {
+        const w = T * 0.85, h = T * 0.28;
+        const bx = d.x + (T - w) / 2, by = d.y + 2;
+        // Ramme
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(bx - 1, by - 1, w + 2, h + 2);
+        // Speil (vertikal gradient)
+        const mg = ctx.createLinearGradient(bx, by, bx, by + h);
+        mg.addColorStop(0, '#a0b0c0');
+        mg.addColorStop(0.5, '#6880a0');
+        mg.addColorStop(1, '#4a5a78');
+        ctx.fillStyle = mg;
+        ctx.fillRect(bx, by, w, h);
+        // Refleks-stripe (diagonal)
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillRect(bx + w * 0.28, by + 1, w * 0.08, h - 2);
+        ctx.fillRect(bx + w * 0.70, by + 1, w * 0.05, h - 2);
+        break;
+      }
+      case 'tray': {
+        const w = T * 0.55, h = T * 0.38;
+        const bx = d.x + (T - w) / 2, by = d.y + (T - h) / 2;
+        // Brett
+        ctx.fillStyle = '#887868';
+        ctx.fillRect(bx, by, w, h);
+        ctx.strokeStyle = '#4a3e34'; ctx.lineWidth = 0.7;
+        ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+        // Mat
+        ctx.fillStyle = '#5a3820';
+        ctx.beginPath(); ctx.arc(bx + w * 0.34, by + h * 0.55, Math.min(w, h) * 0.22, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#a8703a';
+        ctx.beginPath(); ctx.arc(bx + w * 0.34, by + h * 0.50, Math.min(w, h) * 0.11, 0, Math.PI*2); ctx.fill();
+        // Glass
+        ctx.fillStyle = '#e8e8e8';
+        ctx.fillRect(bx + w * 0.72, by + h * 0.22, 3, h * 0.55);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillRect(bx + w * 0.74, by + h * 0.26, 1, h * 0.38);
+        break;
+      }
+      case 'exitSign': {
+        const w = T * 0.62, h = T * 0.28;
+        const bx = d.x + (T - w) / 2, by = d.y + 3;
+        // Ramme
+        ctx.fillStyle = '#0a2a14';
+        ctx.fillRect(bx - 1, by - 1, w + 2, h + 2);
+        // LED grønn
+        ctx.fillStyle = '#28a858';
+        ctx.fillRect(bx, by, w, h);
+        // Tekst
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${Math.max(6, (h * 0.72)|0)}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('EXIT', bx + w / 2, by + h / 2 + 0.5);
+        // Glow under
+        ctx.fillStyle = 'rgba(40,180,80,0.18)';
+        ctx.fillRect(bx - 2, by + h, w + 4, 2);
+        break;
+      }
+      case 'clock': {
+        const r = T * 0.30;
+        // Ramme
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath(); ctx.arc(d.x, d.y, r + 1, 0, Math.PI*2); ctx.fill();
+        // Skive
+        ctx.fillStyle = '#f4f0e4';
+        ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, Math.PI*2); ctx.fill();
+        // Time-markeringer
+        ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
+          const x1 = d.x + Math.cos(a) * r * 0.82;
+          const y1 = d.y + Math.sin(a) * r * 0.82;
+          const x2 = d.x + Math.cos(a) * r * 0.95;
+          const y2 = d.y + Math.sin(a) * r * 0.95;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        }
+        // Visere basert på phaseIndex (5 faser fordelt over hele klokkerunden)
+        const frac = GS.phaseIndex / 5;
+        const hourA = frac * Math.PI * 2 - Math.PI / 2;
+        const minA  = (frac * 12) * Math.PI * 2 / 12 - Math.PI / 2;
+        ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(d.x, d.y);
+        ctx.lineTo(d.x + Math.cos(hourA) * r * 0.48, d.y + Math.sin(hourA) * r * 0.48);
+        ctx.stroke();
+        ctx.strokeStyle = '#c83030'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(d.x, d.y);
+        ctx.lineTo(d.x + Math.cos(minA) * r * 0.75, d.y + Math.sin(minA) * r * 0.75);
+        ctx.stroke();
+        // Sentrum-punkt
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath(); ctx.arc(d.x, d.y, 1, 0, Math.PI*2); ctx.fill();
+        break;
+      }
+      case 'bulletin': {
+        const w = T * 0.72, h = T * 0.58;
+        const bx = d.x + (T - w) / 2, by = d.y + 2;
+        // Kork
+        ctx.fillStyle = '#6a4820';
+        ctx.fillRect(bx, by, w, h);
+        ctx.strokeStyle = '#2a1808'; ctx.lineWidth = 1.2;
+        ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+        // Lapper
+        const papers = [
+          { x: 0.08, y: 0.10, w: 0.38, h: 0.38, c: '#e8d858' },
+          { x: 0.55, y: 0.08, w: 0.38, h: 0.30, c: '#f0f0f0' },
+          { x: 0.12, y: 0.55, w: 0.32, h: 0.33, c: '#d85858' },
+          { x: 0.55, y: 0.48, w: 0.38, h: 0.42, c: '#a0c8a0' },
+        ];
+        for (const p of papers) {
+          ctx.fillStyle = p.c;
+          ctx.fillRect(bx + p.x * w, by + p.y * h, p.w * w, p.h * h);
+          ctx.fillStyle = '#c0302a';
+          ctx.beginPath(); ctx.arc(bx + (p.x + p.w / 2) * w, by + p.y * h + 1, 0.9, 0, Math.PI*2); ctx.fill();
+        }
+        break;
+      }
+      case 'extinguisher': {
+        const w = T * 0.32, h = T * 0.60;
+        const bx = d.x + (T - w) / 2, by = d.y + 2;
+        ctx.fillStyle = 'rgba(0,0,0,0.20)';
+        ctx.fillRect(bx + 1, by + h, w - 2, 2);
+        // Sylinder
+        ctx.fillStyle = '#b02020';
+        ctx.fillRect(bx, by + 3, w, h - 3);
+        // Refleks
+        ctx.fillStyle = 'rgba(255,255,255,0.20)';
+        ctx.fillRect(bx + 1, by + 4, 1.5, h - 6);
+        // Topp-ventil
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(bx + w * 0.3, by, w * 0.4, 3);
+        // Slange
+        ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(bx + w, by + 1);
+        ctx.quadraticCurveTo(bx + w + 2, by + 4, bx + w - 0.5, by + h * 0.45);
+        ctx.stroke();
+        // Lite hvitt skilt
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(bx - 2, by + h * 0.35, 2.5, 3);
+        break;
+      }
+      case 'benchWood': {
+        const w = T * 1.5, h = T * 0.40;
+        const bx = d.x, by = d.y + 3;
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fillRect(bx + 2, by + h, w - 4, 2);
+        // Sete
+        ctx.fillStyle = '#6a4820';
+        ctx.fillRect(bx, by, w, h * 0.55);
+        ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 0.8;
+        ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h * 0.55 - 1);
+        // Plank-skillelinjer
+        ctx.strokeStyle = '#4a3020'; ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(bx + w * 0.33, by); ctx.lineTo(bx + w * 0.33, by + h * 0.55);
+        ctx.moveTo(bx + w * 0.67, by); ctx.lineTo(bx + w * 0.67, by + h * 0.55);
+        ctx.stroke();
+        // Bein
+        ctx.fillStyle = '#3a2410';
+        ctx.fillRect(bx + 2, by + h * 0.55, 2, h * 0.45);
+        ctx.fillRect(bx + w - 4, by + h * 0.55, 2, h * 0.45);
+        break;
+      }
+      case 'basketHoop': {
+        // Bakplate
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(d.x - T * 0.30, d.y - T * 0.25, T * 0.60, T * 0.36);
+        ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 0.8;
+        ctx.strokeRect(d.x - T * 0.30, d.y - T * 0.25, T * 0.60, T * 0.36);
+        // Indre kvadrat
+        ctx.strokeStyle = '#c82020'; ctx.lineWidth = 1;
+        ctx.strokeRect(d.x - T * 0.12, d.y - T * 0.15, T * 0.24, T * 0.18);
+        // Ring
+        ctx.strokeStyle = '#e85020'; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(d.x, d.y + T * 0.13, T * 0.15, 0, Math.PI*2); ctx.stroke();
+        // Nett
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI;
+          ctx.moveTo(d.x + Math.cos(a) * T * 0.15, d.y + T * 0.13 + Math.sin(a) * T * 0.15);
+          ctx.lineTo(d.x + Math.cos(a) * T * 0.07, d.y + T * 0.25);
+        }
+        ctx.stroke();
+        break;
+      }
+      case 'yardMarkings': {
+        const r = T * 0.95;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(230,210,80,0.55)'; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, r, Math.PI, 0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(d.x - r, d.y); ctx.lineTo(d.x + r, d.y);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      }
+      case 'yardPole': {
+        const h = T * 0.75;
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        ctx.beginPath();
+        ctx.ellipse(d.x, d.y + 2, 4, 1.5, 0, 0, Math.PI*2); ctx.fill();
+        // Stang
+        ctx.fillStyle = '#5a5a5a';
+        ctx.fillRect(d.x - 1, d.y - h, 2, h);
+        // Lampehode (kjegle)
+        ctx.fillStyle = '#3a3a3a';
+        ctx.beginPath();
+        ctx.moveTo(d.x - 4, d.y - h);
+        ctx.lineTo(d.x + 4, d.y - h);
+        ctx.lineTo(d.x + 2.5, d.y - h - 4);
+        ctx.lineTo(d.x - 2.5, d.y - h - 4);
+        ctx.closePath();
+        ctx.fill();
+        // Lys-kjerne
+        ctx.fillStyle = '#ffe890';
+        ctx.fillRect(d.x - 2.5, d.y - h + 0.5, 5, 1.2);
+        break;
+      }
+    }
+  }
+}
+
+function renderStaff() {
+  const activeZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
+  for (const s of STAFF_POSITIONS) {
+    if (s.activeWhenZone !== activeZone) continue;
+
+    const base = TILE * 0.33;
+    const br   = base * 0.58;
+    const hr   = base * 0.40;
+    const bx   = s.x, by = s.y + base * 0.18;
+    const hx   = s.x, hy = s.y - base * 0.44;
+
+    drawShadow(s.x, s.y, base * 0.55);
+
+    // Body — hvit forkle
+    ctx.fillStyle = '#e8e8e8';
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#b0b0b0'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
+
+    // Forkle-knyt — mørk stripe ved livet
+    ctx.fillStyle = '#a0a0a0';
+    ctx.fillRect(bx - br * 0.7, by - 0.5, br * 1.4, 1.5);
+
+    // Hode
+    ctx.fillStyle = '#c09060';
+    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
+
+    // Kokkelue — hvit dome over hodet, høyere enn vakt-cap
+    ctx.fillStyle = '#f4f4f4';
+    ctx.beginPath(); ctx.arc(hx, hy - hr * 0.2, hr * 1.30, Math.PI, 0); ctx.fill();
+    ctx.fillRect(hx - hr * 1.05, hy - 1, hr * 2.1, 2);
+  }
+}
+
 function renderTint() {
-  const tint = PHASE_TINT[PHASES[GS.phaseIndex]];
+  const phase = PHASES[GS.phaseIndex];
+  const tint = PHASE_TINT[phase];
   if (tint) {
     ctx.fillStyle = tint;
     ctx.fillRect(0, 0, W, H);
+  }
+  const glow = PHASE_LAMP_GLOW[phase] || 0;
+  if (glow > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const baseR = TILE * 1.7;
+    for (const d of STATIC_DECOR) {
+      if (d.type !== 'lamp' && d.type !== 'yardPole') continue;
+      const cx = d.x;
+      const cy = d.type === 'yardPole' ? d.y - TILE * 0.75 : d.y;
+      const _s = Math.sin(d.x * 12.9898 + d.y * 78.233) * 43758.5453;
+      const _r = _s - Math.floor(_s);
+      const _sz = 0.85 + _r * 0.30;
+      const _a  = (0.82 + ((_r * 7) % 1) * 0.25) * 0.88;
+      const R = baseR * _sz;
+      const grad = ctx.createRadialGradient(cx, cy, 1, cx, cy, R);
+      grad.addColorStop(0, `rgba(255,220,140,${0.48 * glow * _a})`);
+      grad.addColorStop(0.4, `rgba(255,205,110,${0.22 * glow * _a})`);
+      grad.addColorStop(1, 'rgba(255,205,110,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
   }
 }
 
@@ -2381,14 +3271,27 @@ function render() {
   ctx.clearRect(0, 0, W, H);
   renderMap();
   renderLabels();
+  renderDecor();
   renderInmates();
   renderGuards();
+  renderStaff();
   renderTint();
 }
 
 // ================================================================
 // UI UPDATE
 // ================================================================
+function respektLevel(r) {
+  if (r < 20) return 'Ingen respekt';
+  if (r < 40) return 'Lav respekt';
+  if (r < 60) return 'Respektert';
+  if (r < 80) return 'Høy respekt';
+  return 'Fryktet';
+}
+function respektLevelShort(r) {
+  return respektLevel(r).replace(' respekt', '');
+}
+
 function unrestReasons(inm) {
   const r = [];
   if (inm.hygiene  < 30) r.push('Dårlig hygiene');
@@ -2415,6 +3318,7 @@ function unrestReasons(inm) {
     if (idol && idol.isolationTicks > 0) r.push('Idol borte');
   }
   if (inm.aktivitet === 'samling') r.push('I samling');
+  if (inm.isBored) r.push('Kjedelig hverdag');
   return r.slice(0, 3);
 }
 let uiTimer = 0;
@@ -2606,6 +3510,7 @@ function updateUI() {
   document.getElementById('s-isolation').textContent   = GS.stats.isolation;
   document.getElementById('s-counseling').textContent  = GS.stats.counseling;
   document.getElementById('s-library').textContent     = GS.stats.library;
+  document.getElementById('s-workshop').textContent    = GS.stats.workshop;
   document.getElementById('s-disappeared').textContent = GS.stats.disappeared;
 
   // Gjengledere beregnes én gang per UI-tick; leses av liste og detail-panel
@@ -2629,7 +3534,7 @@ function updateUI() {
       ${(!sel.inFight && sel.postFightRoom) ? `<div class="dr"><span class="dl">Status</span><span class="dv" style="color:#c8b460">${sel.postFightRoom === 'isolation' ? 'På isolatet' : sel.postFightRoom === 'counseling' ? 'På samtale' : 'I biblioteket'}</span></div>` : ''}
       <div class="dr"><span class="dl">Soning</span><span class="dv">${sel.soningstidIgjen}/${sel.soningstidTotalt} dager</span></div>
       <div class="dr"><span class="dl">Isolat</span><span class="dv">${sel.isolatCount} ganger</span></div>
-      <div class="dr"><span class="dl">Ry</span><span class="dv">${sel.ry}${GS._leaders && sel.groupId && GS._leaders[sel.groupId] === sel.id ? ' <span style="color:#c8b460">♛ Gjengleder</span>' : ''}</span></div>
+      <div class="dr"><span class="dl">Respekt</span><span class="dv">${sel.respekt} <span style="color:#889">(${respektLevelShort(sel.respekt)})</span>${GS._leaders && sel.groupId && GS._leaders[sel.groupId] === sel.id ? ' <span style="color:#c8b460">♛ Gjengleder</span>' : ''}</span></div>
       <div class="dr" style="margin-top:6px"><span class="dl">Personlighet</span></div>
       <div class="dr"><span class="dl">Temperament</span><span class="dv">${sel.temperament}</span></div>
       <div class="dr"><span class="dl">Sosial</span><span class="dv">${sel.sosial}</span></div>
@@ -2655,6 +3560,18 @@ function updateUI() {
         return `<div class="dr" style="margin-top:6px"><span class="dl">Uro-årsak</span></div>` +
           rs.map(r => `<div class="dr"><span class="dv" style="color:#b06838">&#x2191; ${r}</span></div>`).join('');
       })()}
+      ${sel.id === GS.playerId ? `
+        <div class="dr" style="margin-top:6px"><span class="dl">Spiller</span></div>
+        <div class="dr"><span class="dl">Dager sonet</span><span class="dv">${sel.soningstidTotalt - sel.soningstidIgjen}</span></div>
+        <div class="dr"><span class="dl">Tid i isolat</span><span class="dv">${sel.isolatCount} ganger</span></div>
+        <div class="dr"><span class="dl">Bibliotek</span><span class="dv">${sel.libraryVisits}</span></div>
+        <div class="dr"><span class="dl">Samtaler</span><span class="dv">${sel.counselingCount}</span></div>
+        <div class="dr" style="margin-top:4px"><span class="dl">Kamper</span><span class="dv">${sel.fightsWon + sel.fightsLost} <span style="color:#667">(${sel.fightsWon} S / ${sel.fightsLost} T)</span></span></div>
+        <div class="dr"><span class="dl">Vennskap</span><span class="dv">${sel.friendshipsMade}</span></div>
+        <div class="dr" style="margin-top:4px"><span class="dl">Gjeng</span><span class="dv">${sel.groupId || 'Ingen'}</span></div>
+        <div class="dr"><span class="dl">Respekt</span><span class="dv">${sel.respekt} <span style="color:#889">(${respektLevelShort(sel.respekt)})</span></span></div>
+        <div class="dr"><span class="dl">Gjengleder</span><span class="dv">${GS._leaders && sel.groupId && GS._leaders[sel.groupId] === sel.id ? 'Ja' : 'Nei'}</span></div>
+      ` : ''}
       ${sel.history && sel.history.length ? `
         <div class="dr" style="margin-top:6px"><span class="dl">Historikk</span></div>
         ${sel.history.map(h => `<div class="dr"><span class="dv" style="color:#8a9098;font-size:0.72rem">&bull; ${h}</span></div>`).join('')}
@@ -2671,6 +3588,14 @@ document.querySelectorAll('.sb').forEach(btn => {
   btn.addEventListener('click', () => {
     GS.speed = parseInt(btn.dataset.s);
     document.querySelectorAll('.sb').forEach(b => b.classList.toggle('on', b===btn));
+  });
+});
+
+document.querySelectorAll('.tb').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tb').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('.tabpane').forEach(p => p.classList.toggle('on', p.dataset.tab === tab));
   });
 });
 
@@ -2796,13 +3721,19 @@ function saveGame() {
       cafState: inm.cafState, sleepState: inm.sleepState,
       isolationTicks: inm.isolationTicks, postFightRoom: inm.postFightRoom,
       isolatCount: inm.isolatCount,
-      ry: inm.ry,
+      respekt: inm.respekt,
+      fightsWon: inm.fightsWon, fightsLost: inm.fightsLost,
+      friendshipsMade: inm.friendshipsMade, counselingCount: inm.counselingCount,
       history: inm.history.slice(0, HISTORY_MAX),
       friendId: inm.friendId, notifiedFriendInRoom: inm.notifiedFriendInRoom,
       libraryVisits: inm.libraryVisits,
+      workshopCount: inm.workshopCount,
+      lastWorkshopDay: inm.lastWorkshopDay,
+      isBored: inm.isBored,
     })),
     guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi })),
     stats: { ...GS.stats },
+    playerId: GS.playerId,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
@@ -2815,6 +3746,7 @@ function loadGame() {
   GS.day = data.day; GS.phaseIndex = data.phaseIndex;
   GS.phaseTick = data.phaseTick; GS.speed = data.speed;
   GS.stats = Object.assign(defaultStats(), data.stats || {});
+  GS.playerId = data.playerId ?? null;
   GS.inmates = []; GS.guards = [];
   UID = 1;
   for (const d of data.inmates) {
@@ -2824,7 +3756,18 @@ function loadGame() {
     if (inm.friendId === undefined) inm.friendId = null;
     if (inm.notifiedFriendInRoom === undefined) inm.notifiedFriendInRoom = null;
     if (typeof inm.libraryVisits !== 'number') inm.libraryVisits = 0;
-    if (typeof inm.ry !== 'number') inm.ry = 0;
+    if (typeof inm.workshopCount !== 'number') inm.workshopCount = 0;
+    if (inm.lastWorkshopDay === undefined) inm.lastWorkshopDay = null;
+    if (typeof inm.isBored !== 'boolean') inm.isBored = false;
+    inm._wasInWorkshop = inm.zone === 'workshop';
+    if (typeof inm.respekt !== 'number') {
+      inm.respekt = (typeof inm.ry === 'number') ? inm.ry : 0;
+    }
+    delete inm.ry;
+    if (typeof inm.fightsWon !== 'number') inm.fightsWon = 0;
+    if (typeof inm.fightsLost !== 'number') inm.fightsLost = 0;
+    if (typeof inm.friendshipsMade !== 'number') inm.friendshipsMade = 0;
+    if (typeof inm.counselingCount !== 'number') inm.counselingCount = 0;
     inm._wasInLibrary = inm.zone === 'library';
     inm.waypoints = [];
     inm.currentSpotId = null;
@@ -2854,6 +3797,7 @@ function startGame(fromSave = false) {
     GS.map = buildMap();
     GS.day = 1; GS.phaseIndex = 0; GS.phaseTick = 0;
     GS.stats = defaultStats();
+    GS.playerId = null;
     GS.inmates = []; GS.guards = [];
     spawn();
     const initZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
