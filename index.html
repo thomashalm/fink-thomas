@@ -66,21 +66,30 @@ canvas {
 .ir-empty { padding:12px; text-align:center; color:#334; font-size:0.65rem; }
 .ir.pinned { border-color:#665030; }
 .ir {
-  padding: 8px 12px;
-  margin: 4px 8px;
+  display:grid;
+  grid-template-columns: 1fr auto auto auto 60px auto;
+  align-items:center;
+  gap:6px;
+  padding: 3px 10px;
+  margin: 1px 6px;
   cursor: pointer;
   border: 1px solid #1e2228;
-  border-radius: 4px;
+  border-radius: 3px;
   background: #161a20;
-  transition: background 0.12s, border-color 0.12s, transform 0.08s;
+  font-size: 0.72rem;
+  transition: background 0.12s, border-color 0.12s;
 }
 .ir:hover { background:#1e2430; border-color:#3a4250; }
 .ir.sel  { background:#22293a; border-color:#c8b460; box-shadow:0 0 6px rgba(200,180,96,0.18); }
-.ir-top  { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
-.ir-name { font-size:0.78rem; color:#ccc; font-weight:500; }
-.ir-cell { font-size:0.62rem; color:#556; letter-spacing:1px; }
-.ir-badge{ font-size:0.60rem; font-weight:700; letter-spacing:1px; margin-top:4px; }
-.ub { height:5px; background:#0e1116; border-radius:2px; overflow:hidden; }
+.ir-name   { color:#ccc; font-weight:500;
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+             min-width:0; }
+.ir-cell   { color:#556; font-size:0.62rem; letter-spacing:1px; }
+.ir-status { font-size:0.75rem; min-width:12px; text-align:center; }
+.ir-resp   { font-size:0.66rem; font-family:monospace; letter-spacing:0.5px; }
+.ir-unrest { color:#778; font-size:0.66rem; font-family:monospace;
+             min-width:18px; text-align:right; }
+.ub { height:4px; background:#0e1116; border-radius:2px; overflow:hidden; }
 .uf { height:100%; border-radius:2px; transition:width 0.5s; }
 #detail { border-top:1px solid #1e2228; padding:11px 14px; background:#141820; max-height:50vh; overflow-y:auto; flex-shrink:0; }
 #detail h4 { font-size:0.76rem; color:#c8b460; margin-bottom:6px; }
@@ -3291,6 +3300,13 @@ function respektLevel(r) {
 function respektLevelShort(r) {
   return respektLevel(r).replace(' respekt', '');
 }
+function respektColor(r) {
+  if (r < 20) return '#556';
+  if (r < 40) return '#778';
+  if (r < 60) return '#a8a060';
+  if (r < 80) return '#c8b460';
+  return '#e07040';
+}
 
 function unrestReasons(inm) {
   const r = [];
@@ -3366,18 +3382,20 @@ function getOrCreateCard(inm) {
   root.className = 'ir';
   root.dataset.id = inm.id;
   root.innerHTML = `
-    <div class="ir-top">
-      <span class="ir-name"></span>
-      <span class="ir-cell"></span>
-    </div>
+    <span class="ir-name"></span>
+    <span class="ir-cell"></span>
+    <span class="ir-status"></span>
+    <span class="ir-resp"></span>
     <div class="ub"><div class="uf"></div></div>
-    <div class="ir-badge" style="display:none"></div>`;
+    <span class="ir-unrest"></span>`;
   entry = {
     root,
-    nameEl:  root.querySelector('.ir-name'),
-    cellEl:  root.querySelector('.ir-cell'),
-    barFill: root.querySelector('.uf'),
-    badgeEl: root.querySelector('.ir-badge'),
+    nameEl:   root.querySelector('.ir-name'),
+    cellEl:   root.querySelector('.ir-cell'),
+    statusEl: root.querySelector('.ir-status'),
+    respEl:   root.querySelector('.ir-resp'),
+    barFill:  root.querySelector('.uf'),
+    unrestEl: root.querySelector('.ir-unrest'),
   };
   listNodes.set(inm.id, entry);
   return entry;
@@ -3399,21 +3417,27 @@ function updateCardContent(inm, isPinned) {
   if (e.barFill.style.width !== w) e.barFill.style.width = w;
   if (e.barFill.style.background !== fc) e.barFill.style.background = fc;
 
-  let bTxt = '', bCol = '';
+  const uStr = String(u2);
+  if (e.unrestEl.textContent !== uStr) e.unrestEl.textContent = uStr;
+
+  const rStr = 'R' + inm.respekt;
+  const rCol = respektColor(inm.respekt);
+  if (e.respEl.textContent !== rStr) e.respEl.textContent = rStr;
+  if (e.respEl.style.color !== rCol) e.respEl.style.color = rCol;
+
+  let sTxt = '', sTitle = '', sCol = '';
   if (inm.isolationTicks > 0) {
-    bTxt = `🔒 ISOLAT (${Math.ceil(inm.isolationTicks/1020*24)}t igjen)`;
-    bCol = '#c83030';
+    sTxt = '🔒';
+    sTitle = `Isolat — ${Math.ceil(inm.isolationTicks/1020*24)}t igjen`;
+    sCol = '#c83030';
   } else if (inm.conflictCooldown > 0) {
-    bTxt = '💥 KONFLIKT';
-    bCol = '#e07040';
+    sTxt = '💥';
+    sTitle = 'Konflikt';
+    sCol = '#e07040';
   }
-  if (bTxt) {
-    if (e.badgeEl.textContent !== bTxt) e.badgeEl.textContent = bTxt;
-    if (e.badgeEl.style.color !== bCol) e.badgeEl.style.color = bCol;
-    if (e.badgeEl.style.display === 'none') e.badgeEl.style.display = '';
-  } else if (e.badgeEl.style.display !== 'none') {
-    e.badgeEl.style.display = 'none';
-  }
+  if (e.statusEl.textContent !== sTxt) e.statusEl.textContent = sTxt;
+  if (e.statusEl.title !== sTitle) e.statusEl.title = sTitle;
+  if (e.statusEl.style.color !== sCol) e.statusEl.style.color = sCol;
 }
 
 function applyOrder(list, desired) {
