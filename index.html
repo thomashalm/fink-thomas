@@ -51,6 +51,14 @@ canvas {
 .mlog.fall    { color:#7a96b8; }
 .mlog.throne  { color:#e0c160; font-weight:600; }
 .mlog.bed     { color:#9a8a6a; }
+.departed-item   { padding:4px 0; border-bottom:1px solid #222; }
+.departed-item:last-child { border-bottom:none; }
+.departed-head   { display:flex; gap:6px; align-items:center; font-size:0.72rem; }
+.departed-name   { font-weight:600; color:#c9c4b8; }
+.departed-reason { font-size:0.72rem; color:#8a9098; margin-top:2px; padding-left:34px; }
+.departed-section { font-size:0.58rem; letter-spacing:2px; color:#556; text-transform:uppercase; margin:6px 0 2px; }
+.departed-section:first-child { margin-top:0; }
+#departed-list { max-height:240px; overflow-y:auto; }
 #inmate-section { flex:1; min-height:90px; overflow-y:auto; }
 #inmate-section h3 { font-size:0.6rem; letter-spacing:2px; color:#334; text-transform:uppercase; padding:6px 14px 5px; border-bottom:1px solid #1a1e24; }
 #gang-strip {
@@ -168,7 +176,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.9.8 &bull; 2025</p>
+  <p>Panoptikon v0.9.25 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-continue" disabled>Continue</button>
   <button class="mb" id="btn-load" disabled>Load</button>
@@ -177,7 +185,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.9.8</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.9.25</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -692,6 +700,50 @@ function buildMap() {
   return M;
 }
 
+// Bygger segment-liste for myke sone-kanter. Kalles én gang etter GS.map = buildMap().
+// Returnerer [{x1,y1,x2,y2,color}, ...] i piksler.
+const ZONE_OUTLINE_COLORS = {
+  isolation:  '#c04040',
+  counseling: '#4080c0',
+  library:   '#c08040',
+  workshop:  '#8090a0',
+};
+function computeZoneBorders() {
+  const segs = [];
+  const T = TILE;
+  const M = GS.map;
+  for (const zone of Object.keys(ZONE_OUTLINE_COLORS)) {
+    const color = ZONE_OUTLINE_COLORS[zone];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const t = M[y]?.[x];
+        if (!t || t.zone !== zone) continue;
+        // Top edge
+        const above = M[y - 1]?.[x];
+        if (!above || above.zone !== zone) {
+          segs.push({ x1: x*T, y1: y*T, x2: (x+1)*T, y2: y*T, color });
+        }
+        // Bottom edge
+        const below = M[y + 1]?.[x];
+        if (!below || below.zone !== zone) {
+          segs.push({ x1: x*T, y1: (y+1)*T, x2: (x+1)*T, y2: (y+1)*T, color });
+        }
+        // Left edge
+        const left = M[y]?.[x - 1];
+        if (!left || left.zone !== zone) {
+          segs.push({ x1: x*T, y1: y*T, x2: x*T, y2: (y+1)*T, color });
+        }
+        // Right edge
+        const right = M[y]?.[x + 1];
+        if (!right || right.zone !== zone) {
+          segs.push({ x1: (x+1)*T, y1: y*T, x2: (x+1)*T, y2: (y+1)*T, color });
+        }
+      }
+    }
+  }
+  return segs;
+}
+
 // ================================================================
 // CELL DEFINITIONS
 // ================================================================
@@ -794,10 +846,113 @@ function defaultStats() {
 
 const HISTORY_MAX = 8;
 function addHistory(inm, text) {
-  inm.history.unshift(text);
+  inm.history.unshift({ day: GS.day, text });
   if (inm.history.length > HISTORY_MAX) inm.history.length = HISTORY_MAX;
 }
+
+function historyText(entry) {
+  if (typeof entry === 'string') {
+    const m = entry.match(/^D\d+\s*—\s*(.+)$/);
+    return m ? m[1] : entry;
+  }
+  return entry.text || '';
+}
+
+function historyRender(entry) {
+  if (typeof entry === 'string') return entry;
+  return `D${entry.day} — ${entry.text}`;
+}
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// ================================================================
+// MEMORIES & GRUDGES
+// ================================================================
+// Strukturerte minner per innsatt — danner basis for grudges og
+// er klare til å sendes som kontekst til AI senere.
+const MEMORY_MAX       = 10;
+const GRUDGE_THRESHOLD = 7;
+
+function addMemory(inm, mem) {
+  inm.memories.unshift({ day: GS.day, ...mem });
+  if (inm.memories.length > MEMORY_MAX) inm.memories.length = MEMORY_MAX;
+}
+
+function topMemories(inm, n) {
+  return [...inm.memories]
+    .sort((a, b) => b.weight - a.weight || b.day - a.day)
+    .slice(0, n);
+}
+
+function memoryLabel(m) {
+  const name = m.otherName || '(ukjent)';
+  switch (m.type) {
+    case 'loss':                  return `Tapte mot ${name} (D${m.day})`;
+    case 'win':                   return `Slo ${name} (D${m.day})`;
+    case 'friend_died':           return `Mistet ${name} (D${m.day})`;
+    case 'isolation_after_fight': return `Isolat etter kamp mot ${name} (D${m.day})`;
+    default:                      return `Hendelse (D${m.day})`;
+  }
+}
+
+function getGrudgeTargets(inm) {
+  const scores = new Map();
+  for (const m of inm.memories) {
+    if (m.otherId == null) continue;
+    if (m.type === 'loss' || m.type === 'isolation_after_fight') {
+      scores.set(m.otherId, (scores.get(m.otherId) || 0) + m.weight);
+    }
+  }
+  const out = [];
+  for (const [id, score] of scores) {
+    if (score >= GRUDGE_THRESHOLD) out.push({ id, score });
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
+function hasGrudgeAgainst(inm, otherId) {
+  return getGrudgeTargets(inm).some(g => g.id === otherId);
+}
+
+// ================================================================
+// PERSONLIGE MÅL (AMBITIONS)
+// ================================================================
+function goalLabel(g) {
+  switch (g) {
+    case 'survive':        return 'Overleve soningen';
+    case 'climb':          return 'Bli fryktet';
+    case 'make_friend':    return 'Finne en venn';
+    case 'no_isolation':   return 'Unngå isolat';
+    case 'prove_strength': return 'Vinne 3 kamper';
+    case 'take_over':      return 'Utfordre lederen';
+    default:               return null;
+  }
+}
+
+function goalChanceMod(inm) {
+  if (inm.ambitionAchieved) return 1.0;
+  switch (inm.ambition) {
+    case 'survive':        return 0.85;
+    case 'no_isolation':   return 0.80;
+    case 'climb':          return 1.15;
+    case 'prove_strength': return 1.10;
+    default:               return 1.0;
+  }
+}
+
+function checkAmbitionAchieved(inm) {
+  if (!inm.ambition || inm.ambitionAchieved) return;
+  let done = false;
+  switch (inm.ambition) {
+    case 'climb':          done = inm.respekt >= 70; break;
+    case 'prove_strength': done = inm.fightsWon >= 3; break;
+    case 'make_friend':    done = inm.friendId != null; break;
+  }
+  if (done) {
+    inm.ambitionAchieved = true;
+    addHistory(inm, `🎯 Nådde mål: ${goalLabel(inm.ambition)}.`);
+    addPowerEvent('ambition', `🎯 ${inm.name} nådde sitt mål: ${goalLabel(inm.ambition)}.`);
+  }
+}
 
 const POWER_LOG_MAX = 10;
 function addPowerEvent(kind, text) {
@@ -820,17 +975,19 @@ function addDeparted(inm, reason) {
 function countPastDuels(a, b) {
   if (!a.history || !b.name) return 0;
   let n = 0;
-  for (const line of a.history) {
-    if (line.includes('⚔') && line.includes(b.name)) n++;
+  for (const entry of a.history) {
+    const t = historyText(entry);
+    if (t.includes('⚔') && t.includes(b.name)) n++;
   }
   return n;
 }
 function countRivalWinStreak(inm) {
   if (!inm.history) return 0;
   let streak = 0;
-  for (const line of inm.history) {
-    if (!line.includes('⚔')) continue;
-    if (line.startsWith('⚔ Dominerte') || line.startsWith('⚔ Holdt') || line.startsWith('⚔ Knuste')) streak++;
+  for (const entry of inm.history) {
+    const t = historyText(entry);
+    if (!t.includes('⚔')) continue;
+    if (t.startsWith('⚔ Dominerte') || t.startsWith('⚔ Holdt') || t.startsWith('⚔ Knuste')) streak++;
     else break;
   }
   return streak;
@@ -838,9 +995,10 @@ function countRivalWinStreak(inm) {
 function countRivalLossStreak(inm) {
   if (!inm.history) return 0;
   let streak = 0;
-  for (const line of inm.history) {
-    if (!line.includes('⚔')) continue;
-    if (line.startsWith('⚔ Tapte') || line.startsWith('⚔ Ble banket') || line.startsWith('⚔ Gikk ned')) streak++;
+  for (const entry of inm.history) {
+    const t = historyText(entry);
+    if (!t.includes('⚔')) continue;
+    if (t.startsWith('⚔ Tapte') || t.startsWith('⚔ Ble banket') || t.startsWith('⚔ Gikk ned')) streak++;
     else break;
   }
   return streak;
@@ -1275,38 +1433,117 @@ function buildPath(inmate, targetZone, destSpot = null) {
 // INMATE CLASS
 // ================================================================
 let UID = 1;
-const NAMES = [
-  // Norske
-  'Erik Dahl','Lars Berg','Knut Vik','Ole Moe','Jan Bye','Per Rud',
-  'Tor Lund','Arne Foss','Ivar Nag','Bjørn Hov','Rolf Ask','Geir Sol',
-  'Svein Holm','Kåre Ek','Odd Ruud','Trond Sæter','Magne Ro','Harald Lid',
-  'Gunnar Os','Einar Myr','Stein Bø','Helge Fure',
-  // Polske / baltiske
-  'Piotr Nowak','Tomasz Wójcik','Kamil Dąbrowski',
-  'Mindaugas Petras','Darius Kazlauskas',
-  // Somaliske / østafrikanske
-  'Ahmed Hassan','Omar Ali','Yusuf Mahamed','Hassan Abdi','Samuel Tesfay',
-  // Sør-asiatiske
-  'Amir Khan','Tariq Hussain','Rashid Malik',
-  // Midtøsten / Nord-Afrika
-  'Mohammed Saleh','Ali Rahimi','Karim Fassi',
-  // Tyrkiske / Balkan
-  'Mehmet Yilmaz','Emre Demir','Dragan Petrović','Viktor Ivanov',
-];
+// Navnepools — fornavn + etternavn per kultur-gruppe. Kombineres tilfeldig ved spawn.
+const NAME_POOLS = {
+  skandinavisk: {
+    first: ['Erik','Lars','Knut','Ole','Jan','Per','Tor','Arne','Ivar','Bjørn',
+            'Rolf','Geir','Svein','Kåre','Odd','Trond','Magne','Harald','Gunnar','Einar',
+            'Aksel','Andreas','Anders','Birger','Dag','Eivind','Erling','Espen','Finn',
+            'Fredrik','Gustav','Halvor','Håkon','Henrik','Håvard','Jens','Jonas','Jørgen',
+            'Kjell','Kristoffer','Kim','Leif','Magnus','Marius','Martin','Mats','Morten',
+            'Oskar','Peder','Ragnar','Reidar','Roar','Sander','Sigurd','Sindre','Sondre',
+            'Stian','Sverre','Terje','Thomas','Tobias','Tormod','Truls','Vegard','Vidar','Øyvind'],
+    last:  ['Dahl','Berg','Vik','Moe','Bye','Rud','Lund','Foss','Hov','Ask','Sol','Holm',
+            'Ek','Ruud','Sæter','Lid','Os','Myr','Bø','Fure','Haug','Solheim','Tveit',
+            'Lien','Moen','Nordby','Strand','Kvam','Hagen','Bakken','Lie','Svendsen',
+            'Johansen','Grønn','Enger','Røed','Eide','Brekke','Pedersen','Aas','Østby',
+            'Torp','Rød','Olsen','Haugen','Fredriksen','Lunde','Iversen','Tangen','Dale',
+            'Sund','Kvamme','Sande','Bull','Vold','Fjell','Hauge','Næss','Husby','Lillevik',
+            'Skog','Myhre','Stranden','Aaslund','Rustad','Kollerud','Halvorsen','Bratlie'],
+  },
+  europeisk: {
+    first: ['Piotr','Tomasz','Kamil','Mindaugas','Darius','Jakub','Marek','Paweł',
+            'Krzysztof','Grzegorz','Michał','Rafał','Andrzej','Łukasz','Szymon','Adrian',
+            'Daniel','Mariusz','Artur','Bartosz','Wojciech','Robert','Tadeusz','Jonas',
+            'Rokas','Tomas','Edgars','Jānis','Kaspars','Māris','Andris','Raimonds','Rihards'],
+    last:  ['Nowak','Wójcik','Dąbrowski','Petras','Kazlauskas','Kowalski','Lewandowski',
+            'Zieliński','Szymański','Woźniak','Kamiński','Kowalczyk','Mazur','Kwiatkowski',
+            'Grabowski','Pawlak','Wróbel','Jankowski','Majewski','Zając','Sikora','Górski',
+            'Piotrowski','Kaminskas','Jankauskas','Stankus','Ozols','Bērziņš','Kalniņš',
+            'Liepa','Krūmiņš','Ozoliņš','Eglītis'],
+  },
+  afrikansk: {
+    first: ['Ahmed','Omar','Yusuf','Hassan','Samuel','Abdirahman','Mohamed','Ibrahim',
+            'Abdi','Said','Ali','Abdullahi','Hussein','Khalid','Mustafa','Dahir','Guled',
+            'Jibril','Liban','Awil','Bereket','Dawit','Filmon','Henok','Mikiyas','Robel',
+            'Tesfaldet','Yonas','Bekele','Getachew'],
+    last:  ['Hassan','Ali','Mahamed','Abdi','Tesfay','Farah','Warsame','Jama','Nur',
+            'Ismail','Mire','Osman','Elmi','Aden','Barre','Mohamud','Kahin','Ahmed',
+            'Said','Duale','Haile','Kidane','Medhanie','Gebre','Tadesse','Yohannes',
+            'Negassi','Berhane','Wolde','Alemu'],
+  },
+  midtosten: {
+    first: ['Mohammed','Ali','Karim','Abbas','Ahmad','Farhad','Hossein','Javad',
+            'Kamran','Majid','Mehdi','Navid','Omid','Reza','Saeed','Shahin','Vahid',
+            'Youssef','Tarek','Walid','Fouad','Rami','Ziad','Hicham','Othman','Anas',
+            'Rachid','Mourad','Hamza','Oussama','Ismail','Ayman','Sami','Nabil'],
+    last:  ['Saleh','Rahimi','Fassi','Hamidi','Karimi','Moradi','Amiri','Ghanbari',
+            'Shirazi','Bakhtiari','Sadeghi','Hosseini','Azizi','Mohammadi','Tehrani',
+            'Jafari','Rezaei','Mansour','Nasser','Haddad','Chahine','Khoury','Abbas',
+            'Alami','Idrissi','Bennani','Tahiri','Benali','El Mansouri','Touati',
+            'Berrada','Naciri','Darwish','Boutros'],
+  },
+  sorasiat: {
+    first: ['Amir','Tariq','Rashid','Imran','Bilal','Faisal','Hamza','Junaid','Kashif',
+            'Nadeem','Noman','Salman','Shahid','Usman','Waqar','Zahid','Arjun','Dinesh',
+            'Gaurav','Harpreet','Jaspreet','Kunal','Manjit','Naveen','Pritam','Raj',
+            'Sanjay','Vikram','Vivek','Ashik','Shahriar','Tanvir'],
+    last:  ['Khan','Hussain','Malik','Ahmed','Raza','Sheikh','Iqbal','Butt','Chaudhry',
+            'Siddiqui','Akhtar','Qureshi','Mirza','Farooq','Zaman','Aslam','Sharma',
+            'Kumar','Patel','Singh','Gill','Verma','Sandhu','Rao','Das','Mehta','Gupta',
+            'Chopra','Reddy','Rahman','Karim','Hossain'],
+  },
+  latinamerikansk: {
+    first: ['Carlos','Juan','Miguel','Diego','Javier','Luis','Jose','Pedro','Pablo',
+            'Alejandro','Andres','Antonio','Eduardo','Fernando','Francisco','Gabriel',
+            'Gonzalo','Hector','Ignacio','Jorge','Manuel','Marco','Mateo','Nicolas',
+            'Oscar','Rafael','Ramon','Ricardo','Roberto','Sebastian','Victor','Santiago'],
+    last:  ['García','Rodríguez','Martínez','López','González','Hernández','Pérez',
+            'Sánchez','Ramírez','Flores','Torres','Vargas','Castillo','Ortiz','Morales',
+            'Mendoza','Silva','Rojas','Medina','Reyes','Jiménez','Álvarez','Núñez',
+            'Aguilar','Cortez','Delgado','Fuentes','Herrera','Navarro','Romero'],
+  },
+};
 
-// Unik navn-velger: tar neste ledige fra NAMES, eller suffikser med tall hvis alle er brukt
+// Tilfeldig fornavn+etternavn fra en pool. Faller tilbake til tall-suffiks ved kollisjon.
 function pickUniqueName() {
   const taken = new Set(GS.inmates.map(i => i.name));
-  for (const n of NAMES) {
-    if (!taken.has(n)) return n;
+  const pools = Object.values(NAME_POOLS);
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const pool = pools[Math.floor(Math.random() * pools.length)];
+    const first = pool.first[Math.floor(Math.random() * pool.first.length)];
+    const last  = pool.last[Math.floor(Math.random() * pool.last.length)];
+    const name = `${first} ${last}`;
+    if (!taken.has(name)) return name;
   }
   for (let k = 2; k < 100; k++) {
-    for (const n of NAMES) {
-      const cand = `${n} ${k}`;
-      if (!taken.has(cand)) return cand;
+    for (const pool of pools) {
+      for (const first of pool.first) {
+        for (const last of pool.last) {
+          const cand = `${first} ${last} ${k}`;
+          if (!taken.has(cand)) return cand;
+        }
+      }
     }
   }
   return `Innsatt ${GS.inmates.length + 1}`;
+}
+
+function pickAmbition(temperament, kvirk) {
+  const buckets = [];
+  if (kvirk === 'karismatisk')      buckets.push(['make_friend', 3]);
+  if (kvirk === 'fanatisk')         buckets.push(['climb', 3]);
+  if (kvirk === 'nervøs')           buckets.push(['no_isolation', 3]);
+  if (temperament === 'aggressive') buckets.push(['climb', 2], ['prove_strength', 2]);
+  if (temperament === 'calm')       buckets.push(['survive', 2], ['make_friend', 2]);
+  buckets.push(
+    ['survive', 1], ['make_friend', 1], ['no_isolation', 1],
+    ['climb', 1], ['prove_strength', 1]
+  );
+  const total = buckets.reduce((s, [, w]) => s + w, 0);
+  let r = Math.random() * total;
+  for (const [g, w] of buckets) { r -= w; if (r <= 0) return g; }
+  return 'survive';
 }
 
 const CLOTH_COLORS = ['#c85020','#3858a0','#a02020','#607838','#703898','#a0943a'];
@@ -1350,8 +1587,12 @@ class Inmate {
     this.isFloorSleeper      = false;
     this.hasDominatedForBed  = false;
     this.bedChallengeVs      = null;   // id på motstander i spawn-seng-kamp; null ellers
-    this.ambition            = null;   // null | 'take_over' (kun for berømt nykommer)
+    this.ambition            = null;   // settes nedenfor basert på traits (kan overskrives av spawnNewcomer til 'take_over')
+    this.ambitionAchieved    = false;  // bool — markert når målet er nådd
     this.targetId            = null;   // id på valgt motstander når ambition === 'take_over'
+    this.lastFightOpponent   = null;   // navn på sist motstander (for context i Forsvunnet)
+    this.lastFightDay        = null;   // GS.day da sist kamp endte
+    this.memories            = [];     // {type, day, otherId, otherName, weight} — maks MEMORY_MAX
 
     // Core stats
     this.unrest   = 10 + Math.random()*20;
@@ -1379,6 +1620,9 @@ class Inmate {
     this.idolId           = null;                        // kun fanatisk: ID til karismatisk idol
     this.aktivitet        = 'ingen';                     // settes ved fase-skifte
 
+    // Personlig mål — settes etter traits så pickAmbition kan bruke dem
+    this.ambition = pickAmbition(this.temperament, this.kvirk);
+
     // Conflict state
     this.inConflict       = false;
     this.conflictFlashMs  = 0;    // visuell markør, telles ned per tick
@@ -1397,6 +1641,15 @@ class Inmate {
     this.inFight          = false;
     this.fightMs          = 0;     // gjenværende kamp-varighet
     this.fightOpponent    = null;  // id til motstander
+    this.downedMs         = 0;     // ms igjen liggende etter tapt kamp (0 = reist)
+    this.guardNoticedFight = true; // rulles per kamp ved triggerConflict
+    this.bloodPoolMs      = 0;     // ms igjen blodpøl-visning etter tap (0 = ingen)
+    this.fightPushX       = 0;     // visuell push-offset etter tap (fades i tick)
+    this.fightPushY       = 0;
+
+    // Render-state: retning + bevegelsesflagg (brukes av detaljert render)
+    this._facing          = Math.PI / 2;   // radianer, default = sør (mot kamera)
+    this._isMoving        = false;
 
     // Rom-opphold etter kamp: hvilken type sone vi er i
     // 'isolation' | 'counseling' | 'library' | null
@@ -1435,14 +1688,23 @@ class Inmate {
 
     // Visual look — generated once, stays with this inmate
     const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+    const hs = Math.random();
+    const bs = Math.random();
     this.look = {
-      clothColor: pick(CLOTH_COLORS),
-      skinTone:   pick(SKIN_TONES),
-      hairStyle:  Math.random() < 0.20 ? 0 : (Math.random() < 0.60 ? 1 : 2), // 0=skallete 1=kort 2=hette
-      hairColor:  pick(HAIR_COLORS),
-      beard:      Math.random() < 0.30,
-      scar:       Math.random() < 0.15,
-      sizeFactor: 0.85 + Math.random()*0.30,
+      clothColor:   pick(CLOTH_COLORS),
+      pantsColor:   pick(['#3a2e22','#2a3548','#454030','#1e1e24','#50382a','#2a2418']),
+      jacketColor:  Math.random() < 0.30 ? pick(['#2a2e38','#3a2618','#1e2e22','#402828','#283a3a','#3e3822']) : null,
+      skinTone:     pick(SKIN_TONES),
+      // 0=skallete 1=kort 2=hette 3=hood-up 4=langt
+      hairStyle:    hs < 0.15 ? 0 : hs < 0.45 ? 1 : hs < 0.65 ? 2 : hs < 0.80 ? 3 : 4,
+      hairColor:    pick(HAIR_COLORS),
+      // none / stubble / full — erstatter boolean
+      beardStyle:   bs < 0.50 ? 'none' : bs < 0.80 ? 'stubble' : 'full',
+      sizeFactor:   0.85 + Math.random()*0.30,
+      // Bell-fordelt build/height: de fleste nær midten, sjeldne ytterpunkter
+      build:        0.78 + 0.56 * (Math.random() + Math.random()) / 2, // ~0.78..1.34
+      heightFactor: 0.88 + 0.27 * (Math.random() + Math.random()) / 2, // ~0.88..1.15
+      shoeColor:    pick(['#141414', '#2a2018', '#3a3a40', '#1c1410']),
     };
   }
 
@@ -1507,6 +1769,7 @@ class Inmate {
   }
 
   move(dt) {
+    this._isMoving = false;
     // Handle stagger delay
     if (this.phaseDelay > 0) {
       this.phaseDelay -= dt;
@@ -1517,7 +1780,8 @@ class Inmate {
     }
 
     // Stopp bevegelse under kamp — de står og slåss
-    if (this.inFight) return;
+    // Stopp også bevegelse når innsatt ligger nede etter tap
+    if (this.inFight || this.downedMs > 0) return;
 
     if (this.waypoints.length === 0) {
       // Cafeteria sub-state machine
@@ -1582,6 +1846,8 @@ class Inmate {
       const spd = this.speed * dt * 0.054;
       this.px += dx/d * spd;
       this.py += dy/d * spd;
+      this._facing  = Math.atan2(dy, dx);
+      this._isMoving = true;
     }
   }
 }
@@ -1599,9 +1865,13 @@ class Guard {
     this.target            = null;  // Inmate being targeted, or null
     this.interventionTimer = 0;     // ms spent intervening
     this.scanTimer         = 0;     // ms until next target scan
+    this._isMoving         = false; // settes av move() for patrulje-aura
+    this.pauseUntil        = 0;     // ms-timestamp — stå stille til denne
+    this.facing            = 0;     // radianer, for render + glance-retning
   }
 
   move(dt) {
+    this._isMoving = false;
     // Periodically scan for high-unrest target
     this.scanTimer -= dt;
     if (this.scanTimer <= 0 && !this.target) {
@@ -1611,6 +1881,7 @@ class Guard {
       let best = null, bestScore = -1;
       for (const inm of GS.inmates) {
         if (!inm.inConflict && inm.unrest < 78) continue;   // konflikt → alltid kandidat
+        if (inm.inConflict && !inm.guardNoticedFight) continue;  // vakter "ser ikke" denne kampen
         const dx = inm.px - this.px, dy = inm.py - this.py;
         const d = Math.sqrt(dx*dx + dy*dy);
         if (d < TILE * 10) {
@@ -1620,6 +1891,20 @@ class Guard {
         }
       }
       this.target = best;
+
+      // Glance — hvis ingen target, se på en mildt urolig innsatt i nærheten
+      if (!this.target) {
+        for (const inm of GS.inmates) {
+          if (inm.unrest <= 55) continue;
+          const dx = inm.px - this.px, dy = inm.py - this.py;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          if (d < TILE * 5 && Math.random() < 0.30) {
+            this.facing = Math.atan2(dy, dx);
+            this.pauseUntil = Date.now() + 1400;
+            break;
+          }
+        }
+      }
     }
 
     if (this.target) {
@@ -1638,6 +1923,7 @@ class Guard {
           // Vakt avbryter pågående kamp — la resolve trigge neste tick
           if (this.target.inFight) this.target.fightMs = Math.min(this.target.fightMs, 200);
           this.interventionTimer += dt;
+          this.facing = Math.atan2(dy, dx);
           if (this.interventionTimer >= 4000) {
             this.target.isBeingIntervened = false;
             this.target = null; this.interventionTimer = 0;
@@ -1647,10 +1933,15 @@ class Guard {
           const spd = this.speed * dt * 0.054;
           this.px += dx/d * spd;
           this.py += dy/d * spd;
+          this._isMoving = true;
+          this.facing = Math.atan2(dy, dx);
         }
       }
       return;
     }
+
+    // Pause-gate — stå stille hvis vi er midt i en waypoint-pause eller glance
+    if (Date.now() < this.pauseUntil) return;
 
     // Normal patrol
     const g = this.patrol[this.pi];
@@ -1659,6 +1950,10 @@ class Guard {
     const d  = Math.sqrt(dx*dx + dy*dy);
     if (d < 3) {
       this.pi = (this.pi + 1) % this.patrol.length;
+      // 35 % sjanse for kort pause ved hver waypoint-ankomst
+      if (Math.random() < 0.35) {
+        this.pauseUntil = Date.now() + 900 + Math.random() * 1500;
+      }
       // Smartere patrulje: når vi runder, sikt mot waypoint nærmest høyeste-uro-innsatt (hvis uro > 55)
       if (this.pi === 0) {
         let hotInm = null, hotUnrest = 55;
@@ -1682,6 +1977,8 @@ class Guard {
       const spd = this.speed * dt * 0.054;
       this.px += dx/d * spd;
       this.py += dy/d * spd;
+      this._isMoving = true;
+      this.facing = Math.atan2(dy, dx);
     }
   }
 }
@@ -1867,12 +2164,25 @@ function assignIdols() {
   }
 }
 
+// Bygger en beskrivende dødsårsak basert på siste kamp og rom-kontekst.
+function buildDeathReason(inm) {
+  const opp    = inm.lastFightOpponent;
+  const recent = inm.lastFightDay != null && (GS.day - inm.lastFightDay) <= 1;
+  if (inm.isolationTicks > 0 && inm.postFightRoom === 'isolation') {
+    return opp ? `Døde i isolat etter kamp mot ${opp}` : 'Døde i isolat';
+  }
+  if (recent && opp) return `Døde etter kamp mot ${opp}`;
+  if (opp)           return `Døde av skader — sist i kamp mot ${opp}`;
+  return 'Ukjent årsak';
+}
+
 // Fjerner innsatt på indeks i, rydder referanser, spawner erstatning.
-function removeInmate(i, reason = 'Døde av skader') {
+function removeInmate(i, reasonOverride = null) {
   const inm = GS.inmates[i];
   const cellId = inm.cellId;
   const removedId = inm.id;
   const wasKarismatisk = inm.kvirk === 'karismatisk';
+  const reason = reasonOverride || buildDeathReason(inm);
 
   addDeparted(inm, reason);
   releaseSpot(removedId);
@@ -1883,6 +2193,8 @@ function removeInmate(i, reason = 'Døde av skader') {
   for (const other of GS.inmates) {
     if (other === inm) continue;
     if (other.friendId === removedId) {
+      addMemory(other, { type: 'friend_died', otherId: removedId, otherName: inm.name, weight: 7 });
+      addHistory(other, `Mistet vennen ${inm.name}.`);
       other.friendId = null;
       other.notifiedFriendInRoom = null;
     }
@@ -2040,6 +2352,8 @@ function triggerConflict(a, b) {
   a.fightMs = b.fightMs = dur;
   a.fightOpponent = b.id;
   b.fightOpponent = a.id;
+  // 60 % sjanse for at vakter legger merke til denne kampen
+  a.guardNoticedFight = b.guardNoticedFight = Math.random() < 0.60;
   a.waypoints = [];
   b.waypoints = [];
   a.inConflict = b.inConflict = true;
@@ -2066,12 +2380,28 @@ function resolveFight(a, b) {
   loser.health = Math.max(HEALTH_FLOOR, loser.health - dmg);
   loser.unrest = Math.min(100, loser.unrest + 15);
 
+  // Lagre kamp-kontekst for Forsvunnet-panelet
+  loser.lastFightOpponent  = winner.name;
+  loser.lastFightDay       = GS.day;
+  winner.lastFightOpponent = loser.name;
+  winner.lastFightDay      = GS.day;
+
   // Vinner: litt lavere uro, ingen skade
   winner.unrest = Math.max(0, winner.unrest - 5);
 
   // Rivalitet — to dominante som slåss gir større respekt-utslag + egen historikk
   const rivalry = winner.respekt > DOMINANT_THRESHOLD && loser.respekt > DOMINANT_THRESHOLD;
   const loserWasDominant = loser.respekt > DOMINANT_THRESHOLD;
+
+  // Hevn: sjekk FØR vi legger til nye minner (grudge avledes fra prior losses)
+  const wasRevenge = hasGrudgeAgainst(winner, loser.id);
+
+  // Minner: strukturert logg av kamputfall (grunnlag for grudges + AI-kontekst)
+  const lossWeight = 4 + (rivalry ? 1 : 0) + (winner.respekt >= 75 ? 1 : 0);
+  const winWeight  = 2 + (loser.respekt  >= 75 ? 1 : 0);
+  addMemory(loser,  { type: 'loss', otherId: winner.id, otherName: winner.name, weight: lossWeight });
+  addMemory(winner, { type: 'win',  otherId: loser.id,  otherName: loser.name,  weight: winWeight  });
+
   if (rivalry) {
     winner.respekt = Math.min(100, winner.respekt + RIVALRY_WIN_RESPEKT);
     loser.respekt  = Math.max(0,   loser.respekt  - RIVALRY_LOSS_RESPEKT);
@@ -2098,10 +2428,30 @@ function resolveFight(a, b) {
     addPowerEvent('fall', `🎯 ${loser.name} tapte mot sitt mål.`);
   }
 
+  // Hevn: vinneren bar grudge mot taperen → liten respekt-bonus og egen logg
+  if (wasRevenge) {
+    winner.respekt = Math.min(100, winner.respekt + 3);
+    addHistory(winner, `⚡ Fikk sin hevn mot ${loser.name}.`);
+    addPowerEvent('rivalry', `⚡ ${winner.name} tok hevn mot ${loser.name}.`);
+  }
+
   // Rydd opp kamp-flagg på begge
   a.inFight = b.inFight = false;
   a.fightMs = b.fightMs = 0;
   a.fightOpponent = b.fightOpponent = null;
+  a.guardNoticedFight = b.guardNoticedFight = true;   // nullstill så neste kamp ruller på nytt
+
+  // Taper ligger nede i 2–4 sekunder
+  loser.downedMs = 2000 + Math.random() * 2000;
+
+  // Blodpøl under taperen — litt lengre enn downedMs så den vedvarer etter stand-up
+  loser.bloodPoolMs = 3500;
+
+  // Push-offset: taperen skyves ~8 px bort fra vinneren (visuelt, fades i tick)
+  const dxP = loser.px - winner.px, dyP = loser.py - winner.py;
+  const dP  = Math.hypot(dxP, dyP) || 1;
+  loser.fightPushX = (dxP/dP) * 8;
+  loser.fightPushY = (dyP/dP) * 8;
 
   // Historikk — kort hendelse per innsatt
   if (rivalry) {
@@ -2154,6 +2504,18 @@ function resolveFight(a, b) {
   if (a.conflictCount >= ISOLATION_THRESHOLD) sendToRoomAfterFight(a);
   if (b.conflictCount >= ISOLATION_THRESHOLD) sendToRoomAfterFight(b);
 
+  // Isolat-etter-kamp-minne: legges til kun hvis ruting endte i isolat
+  if (a.postFightRoom === 'isolation') {
+    const oppId = (a === winner) ? loser.id   : winner.id;
+    const oppNm = (a === winner) ? loser.name : winner.name;
+    addMemory(a, { type: 'isolation_after_fight', otherId: oppId, otherName: oppNm, weight: 5 });
+  }
+  if (b.postFightRoom === 'isolation') {
+    const oppId = (b === winner) ? loser.id   : winner.id;
+    const oppNm = (b === winner) ? loser.name : winner.name;
+    addMemory(b, { type: 'isolation_after_fight', otherId: oppId, otherName: oppNm, weight: 5 });
+  }
+
   // Spawn-seng-kamp: hvis en av sidene hadde bedChallengeVs, avgjør seng nå.
   if (winner.bedChallengeVs === loser.id || loser.bedChallengeVs === winner.id) {
     const newcomer = winner.bedChallengeVs === loser.id ? winner : loser;
@@ -2201,6 +2563,10 @@ function resolveFight(a, b) {
     newcomer.bedChallengeVs = null;
     defender.bedChallengeVs = null;
   }
+
+  // Sjekk oppnådde personlige mål etter kampen
+  checkAmbitionAchieved(winner);
+  checkAmbitionAchieved(loser);
 }
 
 // Gjengkrig — massiv unrest-injeksjon i to gjenger
@@ -2248,7 +2614,18 @@ function runConflictCheck() {
         (a.ambition === 'take_over' && a.targetId === b.id) ||
         (b.ambition === 'take_over' && b.targetId === a.id);
 
-      if (!ambitionPair) {
+      // Grudge-par: minst én part bærer en grudge mot den andre
+      const grudgePair = hasGrudgeAgainst(a, b.id) || hasGrudgeAgainst(b, a.id);
+
+      // Leder-utfordring: sterk innsatt (ikke selv leder) møter en gjengleder
+      const leadersMap = GS._leaders || {};
+      const aIsLeader = a.groupId && leadersMap[a.groupId] === a.id;
+      const bIsLeader = b.groupId && leadersMap[b.groupId] === b.id;
+      const leaderChallengePair =
+        (bIsLeader && !aIsLeader && a.respekt > 60) ||
+        (aIsLeader && !bIsLeader && b.respekt > 60);
+
+      if (!ambitionPair && !grudgePair) {
         // Dominant mot svak: skip halvparten av gangene — gir rivaler tid til å finne hverandre
         if (a.respekt > DOMINANT_THRESHOLD && b.respekt < 50 && Math.random() < WEAK_SKIP_CHANCE) continue;
         if (b.respekt > DOMINANT_THRESHOLD && a.respekt < 50 && Math.random() < WEAK_SKIP_CHANCE) continue;
@@ -2260,7 +2637,10 @@ function runConflictCheck() {
       if (a.respekt > DOMINANT_THRESHOLD && b.respekt > DOMINANT_THRESHOLD) {
         chance = Math.min(1.0, chance * RIVALRY_CHANCE_MULT);
       }
+      if (grudgePair && !ambitionPair) chance = Math.min(1.0, chance * 1.6);
+      if (leaderChallengePair) chance = Math.min(1.0, chance * 1.5);
       if (ambitionPair) chance = 1.0;
+      else chance = Math.min(1.0, chance * goalChanceMod(a) * goalChanceMod(b));
       if (Math.random() > chance) continue;
 
       triggerConflict(a, b);
@@ -2285,6 +2665,7 @@ function computeFriendWeight(a, b) {
   if (a.kvirk === 'karismatisk' || a.temperament === 'calm')       w *= 1.5;
   if (a.kvirk === 'fanatisk'    || a.temperament === 'aggressive') w *= 0.15;
   if (a.kvirk === 'nervøs')                                         w *= 0.7;
+  if (a.ambition === 'make_friend' && !a.ambitionAchieved)          w *= 1.5;
   return w;
 }
 
@@ -2316,6 +2697,8 @@ function runFriendFormation() {
         }
         addHistory(a, `Ble venn med ${b.name}`);
         addHistory(b, `Ble venn med ${a.name}`);
+        checkAmbitionAchieved(a);
+        checkAmbitionAchieved(b);
         break;
       }
     }
@@ -2380,8 +2763,17 @@ function tick() {
       for (let i = GS.inmates.length - 1; i >= 0; i--) {
         GS.inmates[i].soningstidIgjen--;
         if (GS.inmates[i].soningstidIgjen <= 0) {
-          const cellId = GS.inmates[i].cellId;
-          addDeparted(GS.inmates[i], 'Slapp ut etter endt soning');
+          const leaving = GS.inmates[i];
+          const cellId = leaving.cellId;
+          if (leaving.ambition === 'survive' && !leaving.ambitionAchieved && leaving.fightsLost === 0) {
+            leaving.ambitionAchieved = true;
+            addPowerEvent('ambition', `🎯 ${leaving.name} overlevde soningen uten tap.`);
+          }
+          if (leaving.ambition === 'no_isolation' && !leaving.ambitionAchieved && leaving.isolatCount === 0) {
+            leaving.ambitionAchieved = true;
+            addPowerEvent('ambition', `🎯 ${leaving.name} slapp ut uten å havne i isolat.`);
+          }
+          addDeparted(leaving, 'Slapp ut etter endt soning');
           GS.inmates.splice(i, 1);
           const fresh = new Inmate(cellId);
           fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
@@ -2445,6 +2837,8 @@ function tick() {
       }
     } else {
       let nearbyCount = 0;
+      // Cache grudge-ider én gang per innsatt per tick (unngår scan av memories i inner-loop)
+      const grudgeIds = new Set(getGrudgeTargets(inm).map(g => g.id));
       for (const other of GS.inmates) {
         if (other === inm) continue;
         const dx = other.px - inm.px, dy = other.py - inm.py;
@@ -2469,6 +2863,16 @@ function tick() {
           if (other.kvirk === 'karismatisk') delta -= 0.08 * prox;
           // Samling-smitte: utenforstående i samme sone som samling blir ukomfortable
           if (inm.aktivitet !== 'samling' && other.aktivitet === 'samling') delta += 0.08 * prox;
+          // Grudge-nærhet — minner bygger press når den som bærer grudge er nær fienden
+          if (grudgeIds.has(other.id)) delta += 0.30 * prox;
+          // Farlige naboer — svakere innsatte blir stresset av dominerende/aggressive/nylig-i-kamp
+          const otherIsDangerous =
+            other.respekt > 70 ||
+            other.conflictCooldown > 0 ||
+            other.kvirk === 'impulsiv';
+          if (otherIsDangerous && inm.respekt < other.respekt - 20 && inm.stressTolerance === 'low') {
+            delta += 0.20 * prox;
+          }
         }
       }
       // Paranoid — overfylt sone føles truende
@@ -2581,6 +2985,18 @@ function tick() {
     if (inm.conflictFlashMs  > 0) {
       inm.conflictFlashMs = Math.max(0, inm.conflictFlashMs - TICK_MS);
       if (inm.conflictFlashMs === 0) inm.inConflict = false;
+    }
+    // downed-timer: ligger nede etter tapt kamp, blokkerer bevegelse
+    if (inm.downedMs > 0) inm.downedMs = Math.max(0, inm.downedMs - TICK_MS);
+    // blodpøl-nedtelling etter tap
+    if (inm.bloodPoolMs > 0) inm.bloodPoolMs = Math.max(0, inm.bloodPoolMs - TICK_MS);
+    // push-offset decay (visuell slide-back etter kamp)
+    if (inm.fightPushX || inm.fightPushY) {
+      inm.fightPushX *= 0.55;
+      inm.fightPushY *= 0.55;
+      if (Math.hypot(inm.fightPushX, inm.fightPushY) < 0.3) {
+        inm.fightPushX = inm.fightPushY = 0;
+      }
     }
     // kamp-timer: kun siden med lavere id kjører resolve for å unngå dobbel
     if (inm.fightMs > 0) {
@@ -2745,6 +3161,439 @@ function drawShadow(x, y, w) {
   ctx.restore();
 }
 
+// ================================================================
+// Farge-helpers for detaljert inmate-render
+// ================================================================
+function _mixHex(hex, toward, amt) {
+  const a  = parseInt(hex.slice(1), 16);
+  const b  = parseInt(toward.slice(1), 16);
+  const ar = (a>>16)&255, ag = (a>>8)&255, ab = a&255;
+  const br = (b>>16)&255, bg = (b>>8)&255, bb = b&255;
+  const r  = Math.round(ar + (br-ar)*amt);
+  const g  = Math.round(ag + (bg-ag)*amt);
+  const bl = Math.round(ab + (bb-ab)*amt);
+  return `rgb(${r},${g},${bl})`;
+}
+const _lighten = (hex, amt) => _mixHex(hex, '#ffffff', amt);
+const _darken  = (hex, amt) => _mixHex(hex, '#000000', amt);
+
+function deriveFacing(inm) {
+  if (inm.inFight) {
+    const opp = GS.inmates.find(x => x.id === inm.fightOpponent);
+    if (opp) {
+      const dx = opp.px - inm.px, dy = opp.py - inm.py;
+      if (dx !== 0 || dy !== 0) return Math.atan2(dy, dx);
+    }
+  }
+  if (inm.waypoints && inm.waypoints.length > 0) {
+    const w = inm.waypoints[0];
+    const dx = w.px - inm.px, dy = w.py - inm.py;
+    if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) return Math.atan2(dy, dx);
+  }
+  return (typeof inm._facing === 'number') ? inm._facing : Math.PI / 2;
+}
+
+// Detaljert inmate-render — kun prototypen. Kalles INNENFOR samme scope som
+// det eksisterende body+head-blokken, mellom selection-ring og status-emoji.
+// Forventer at (px, py) allerede inkluderer fightPush + lunge (kaller sender
+// det inn). base er samme som i renderInmates-loopen.
+function renderInmateDetailed(inm, px, py, base, facing) {
+  const look    = inm.look;
+  const build   = (typeof look.build === 'number') ? look.build : 1.0;
+  const tall    = (typeof look.heightFactor === 'number') ? look.heightFactor : 1.0;
+  const br      = base * 0.56 * build;
+  const hr      = base * 0.40 * (0.94 + 0.06 * build);
+
+  // Pust + walk/idle animasjoner
+  const now     = Date.now();
+  const breath  = 1 + 0.025 * Math.sin(now * 0.002 + inm.id * 0.7);
+  const moving  = !!inm._isMoving && !inm.inFight && inm.downedMs === 0;
+  const bob     = moving ? Math.sin(now * 0.012 + inm.id) * 0.7 : 0;
+  const lean    = moving
+    ? Math.sin((facing - Math.PI/2)) * 0.052   // ~3° mot gang-retning
+    : Math.sin(now * 0.001 + inm.id) * 0.012;  // idle-sway ~0.7°
+
+  // Pivot ved fotpunkt, så lean + breath roterer naturlig
+  const pivotY = py + base * 0.85;
+
+  ctx.save();
+  ctx.translate(px, pivotY);
+  ctx.rotate(lean);
+  ctx.scale(breath, breath);
+  ctx.translate(-px, -pivotY);
+
+  // Arbeidskoordinater (etter bob). heightFactor strekker vertikale avstander.
+  const bx = px,           by = py + base * 0.18 * tall + bob;
+  const hx = px,           hy = py - base * 0.44 * tall + bob;
+
+  const gangColor = GANG_COLOR[inm.groupId] || '#888';
+  const inGang    = inm.groupId != null;
+
+  // Retningsskalarer for facing-aware detaljer
+  const fwd   = facing - Math.PI/2;              // 0 = mot kamera
+  const faceX = Math.sin(fwd);                   // -1..1: venstre/høyre
+  const faceY = Math.cos(fwd);                   // 1 = mot kamera, -1 = bort
+  const frontFacing = Math.max(0, faceY);        // 0..1 (fade for ansikt)
+  const sideFacing  = Math.abs(faceX);           // 0..1 (for øre)
+
+  // ========== BEIN ==========
+  // Walk-fase: ett bein forover, ett bak, alternerende
+  const walkPhase = moving ? Math.sin(now * 0.012 + inm.id) : 0;
+  const pantsColor = look.pantsColor || _darken(look.clothColor, 0.32);
+  const legBaseY = py + base * 0.78 * tall;
+  ctx.save();
+  ctx.fillStyle = pantsColor;
+  // Venstre bein
+  const lLift = moving ? Math.max(0, walkPhase) * 0.8 : 0;
+  ctx.beginPath();
+  ctx.ellipse(px - br * 0.42, legBaseY - lLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Høyre bein
+  const rLift = moving ? Math.max(0, -walkPhase) * 0.8 : 0;
+  ctx.beginPath();
+  ctx.ellipse(px + br * 0.42, legBaseY - rLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Kontur-antydning
+  ctx.strokeStyle = 'rgba(0,0,0,0.40)'; ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.ellipse(px - br * 0.42, legBaseY - lLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(px + br * 0.42, legBaseY - rLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2); ctx.stroke();
+  ctx.restore();
+
+  // ========== SKO ==========
+  // Mørk blokk i bunnen av hvert bein — beveger seg med walkPhase
+  const shoeColor = look.shoeColor || '#141414';
+  const shoeW = br * 0.38;
+  const shoeH = br * 0.22;
+  const shoeY = legBaseY + br * 0.50;
+  ctx.save();
+  ctx.fillStyle = shoeColor;
+  ctx.beginPath(); ctx.ellipse(px - br * 0.42, shoeY - lLift, shoeW, shoeH, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(px + br * 0.42, shoeY - rLift, shoeW, shoeH, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.ellipse(px - br * 0.42, shoeY - lLift, shoeW, shoeH, 0, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(px + br * 0.42, shoeY - rLift, shoeW, shoeH, 0, 0, Math.PI*2); ctx.stroke();
+  ctx.restore();
+
+  // ========== BAKRE ARM ==========
+  // Arm motsatt facing — tegnes først så fremre arm overlapper
+  const armSway = moving ? Math.sin(now * 0.012 + inm.id + Math.PI) * 1.0 : 0;
+  const armY    = by + br * 0.05;
+  const armLen  = br * 0.55;
+  const armWid  = br * 0.30;
+  const backArmX  = bx + faceX * br * 1.05 * -1;   // motsatt facing-side
+  const backArmY  = armY - armSway;
+  ctx.save();
+  ctx.fillStyle = _darken(look.clothColor, 0.10);
+  ctx.beginPath();
+  ctx.ellipse(backArmX, backArmY, armWid, armLen, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 0.7;
+  ctx.stroke();
+  ctx.restore();
+
+  // ========== TORSO ==========
+  // Radial gradient: lysere øvre → mørkere nedre
+  const torsoGrad = ctx.createRadialGradient(
+    bx - br * 0.25, by - br * 0.5, 0,
+    bx,             by,              br * 1.15
+  );
+  torsoGrad.addColorStop(0, _lighten(look.clothColor, 0.22));
+  torsoGrad.addColorStop(0.6, look.clothColor);
+  torsoGrad.addColorStop(1,   _darken(look.clothColor, 0.22));
+  ctx.fillStyle = torsoGrad;
+  ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+
+  // Rim-light venstre side
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,245,220,0.40)'; ctx.lineWidth = 1.1;
+  ctx.beginPath(); ctx.arc(bx, by, br - 0.3, Math.PI * 1.05, Math.PI * 1.35); ctx.stroke();
+  ctx.restore();
+
+  // Torso kontur
+  ctx.strokeStyle = 'rgba(0,0,0,0.60)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
+
+  // ========== JAKKE / VEST (~30 %) ==========
+  // Andre-lags klær oppå skjorta — gir to-tone silhuett
+  if (look.jacketColor) {
+    const jackR = br * 0.88;
+    const jackGrad = ctx.createRadialGradient(
+      bx - jackR * 0.25, by - jackR * 0.45, 0,
+      bx,                by - jackR * 0.10, jackR * 1.15
+    );
+    jackGrad.addColorStop(0,   _lighten(look.jacketColor, 0.20));
+    jackGrad.addColorStop(0.6, look.jacketColor);
+    jackGrad.addColorStop(1,   _darken(look.jacketColor, 0.22));
+    ctx.save();
+    ctx.fillStyle = jackGrad;
+    ctx.beginPath(); ctx.arc(bx, by - br * 0.08, jackR, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.arc(bx, by - br * 0.08, jackR, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Krage-bue (under hodet)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.arc(bx, by, br * 0.9, Math.PI * 1.15, Math.PI * 1.85);
+  ctx.stroke();
+  ctx.restore();
+
+  // Gjeng-symbol (samme som eksisterende render)
+  if (inGang) {
+    ctx.save();
+    ctx.fillStyle = gangColor; ctx.globalAlpha = 0.82;
+    const ss = br * 0.48;
+    if (inm.groupId === 'A') {
+      ctx.beginPath(); ctx.moveTo(bx, by-ss); ctx.lineTo(bx+ss*0.85, by+ss*0.5); ctx.lineTo(bx-ss*0.85, by+ss*0.5); ctx.closePath(); ctx.fill();
+    } else if (inm.groupId === 'B') {
+      ctx.beginPath(); ctx.arc(bx, by, ss*0.6, 0, Math.PI*2); ctx.fill();
+    } else if (inm.groupId === 'C') {
+      ctx.fillRect(bx-ss*0.6, by-ss*0.6, ss*1.2, ss*1.2);
+    }
+    ctx.restore();
+  }
+
+  // ========== FREMRE ARM ==========
+  const frontArmX = bx + faceX * br * 1.05;
+  const frontArmY = armY + armSway;
+  ctx.save();
+  ctx.fillStyle = look.clothColor;
+  ctx.beginPath();
+  ctx.ellipse(frontArmX, frontArmY, armWid, armLen, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.50)'; ctx.lineWidth = 0.8;
+  ctx.stroke();
+  // Rim-light på ytterkant av fremre arm
+  ctx.strokeStyle = 'rgba(255,245,220,0.30)'; ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.ellipse(frontArmX, frontArmY, armWid, armLen, 0, Math.PI * 0.95, Math.PI * 1.25);
+  ctx.stroke();
+  ctx.restore();
+
+  // ========== NAKKE ==========
+  ctx.save();
+  ctx.fillStyle = _darken(look.skinTone, 0.25);
+  ctx.fillRect(hx - 1.2, hy + hr * 0.55, 2.4, base * 0.22);
+  ctx.restore();
+
+  // ========== HODE ==========
+  const headGrad = ctx.createRadialGradient(
+    hx - hr * 0.30, hy - hr * 0.50, 0,
+    hx,             hy,              hr * 1.15
+  );
+  headGrad.addColorStop(0,   _lighten(look.skinTone, 0.18));
+  headGrad.addColorStop(0.6, look.skinTone);
+  headGrad.addColorStop(1,   _darken(look.skinTone, 0.22));
+  ctx.fillStyle = headGrad;
+  ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
+
+  // Kjevekant-skygge
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,0,0,0.30)'; ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.arc(hx, hy, hr - 0.2, Math.PI * 0.28, Math.PI * 0.72);
+  ctx.stroke();
+  ctx.restore();
+
+  // Hode kontur
+  ctx.strokeStyle = 'rgba(0,0,0,0.60)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.stroke();
+
+  // Rim-light på hode (venstre side)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,245,220,0.50)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(hx, hy, hr - 0.3, Math.PI * 1.10, Math.PI * 1.40);
+  ctx.stroke();
+  ctx.restore();
+
+  // ========== ØRE-ANTYDNING (kun i profil) ==========
+  if (sideFacing > 0.3) {
+    ctx.save();
+    ctx.fillStyle = _darken(look.skinTone, 0.22);
+    ctx.globalAlpha = (sideFacing - 0.3) / 0.7;
+    const earX = hx - faceX * hr * 0.95;   // motsatt facing
+    ctx.beginPath();
+    ctx.ellipse(earX, hy, hr * 0.18, hr * 0.32, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ========== HÅR ==========
+  // 0=skallet 1=kort 2=hette 3=hood-up 4=langt
+  if (look.hairStyle > 0) {
+    const capR = look.hairStyle === 2 ? hr * 1.20
+               : look.hairStyle === 3 ? hr * 1.40
+               : look.hairStyle === 4 ? hr * 1.06
+               : hr * 1.02;
+    const hairGrad = ctx.createRadialGradient(
+      hx - hr * 0.25, hy - hr * 0.55, 0,
+      hx,             hy - hr * 0.2,   capR
+    );
+    hairGrad.addColorStop(0, _lighten(look.hairColor, 0.25));
+    hairGrad.addColorStop(1, _darken(look.hairColor, 0.15));
+    const arcShift = (facing - Math.PI/2) * 0.25;
+
+    if (look.hairStyle === 3) {
+      // Hood-up: øvre arc + faller ned til skulder for sterk silhuett
+      ctx.save();
+      ctx.fillStyle = hairGrad;
+      ctx.beginPath();
+      ctx.arc(hx, hy, capR, Math.PI, 0, false);
+      ctx.lineTo(hx + capR, hy + hr * 0.90);
+      ctx.quadraticCurveTo(hx, hy + hr * 1.05, hx - capR, hy + hr * 0.90);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.9;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // Standard hår-arc (kort/hette/langt)
+      ctx.save();
+      ctx.fillStyle = hairGrad;
+      ctx.beginPath();
+      ctx.arc(hx, hy, capR, Math.PI + arcShift, arcShift, false);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+
+      // Langt hår: ekstra ellipser som faller ned langs sidene
+      if (look.hairStyle === 4) {
+        ctx.save();
+        ctx.fillStyle = hairGrad;
+        ctx.beginPath();
+        ctx.ellipse(hx - capR * 0.78, hy + hr * 0.28, hr * 0.20, hr * 0.58, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.50)'; ctx.lineWidth = 0.7;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(hx + capR * 0.78, hy + hr * 0.28, hr * 0.20, hr * 0.58, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Highlight-streke (ikke for hood, gjøres over; ikke meningsfull for langt heller)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,245,220,0.35)'; ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(hx, hy, capR - 0.4, Math.PI * 1.15, Math.PI * 1.45);
+      ctx.stroke();
+      ctx.restore();
+
+      // Hairline mot hud — kun når vendt fremover
+      if (frontFacing > 0.3) {
+        ctx.save();
+        ctx.globalAlpha = (frontFacing - 0.3) / 0.7 * 0.7;
+        ctx.strokeStyle = _darken(look.hairColor, 0.4);
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(hx, hy, capR * 0.92, Math.PI + arcShift + 0.15, arcShift - 0.15, false);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  // ========== ANSIKT (facing-aware) ==========
+  if (frontFacing > 0.15) {
+    const faceAlpha = (frontFacing - 0.15) / 0.85;
+    ctx.save();
+    ctx.globalAlpha = faceAlpha;
+
+    // Øye-posisjon: roter (±hr*0.38, hr*0.15) med (facing - PI/2)
+    const eyeDx = hr * 0.38, eyeDy = hr * 0.18;
+    const cosF = Math.cos(fwd), sinF = Math.sin(fwd);
+    const eye1x = hx + ( eyeDx * cosF - eyeDy * sinF);
+    const eye1y = hy + ( eyeDx * sinF + eyeDy * cosF);
+    const eye2x = hx + (-eyeDx * cosF - eyeDy * sinF);
+    const eye2y = hy + (-eyeDx * sinF + eyeDy * cosF);
+
+    // Blink — seedet pr. id
+    const blinkPeriod = 3000 + ((inm.id * 137) % 2000);
+    const blinkPhase  = (now + inm.id * 311) % blinkPeriod;
+    const blinking    = blinkPhase < 120;
+
+    ctx.fillStyle = 'rgba(20,14,10,0.90)';
+    if (blinking) {
+      // Lukkede øyne — korte horisontale streker
+      ctx.strokeStyle = 'rgba(20,14,10,0.90)'; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.moveTo(eye1x - 0.9, eye1y); ctx.lineTo(eye1x + 0.9, eye1y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(eye2x - 0.9, eye2y); ctx.lineTo(eye2x + 0.9, eye2y); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(eye1x, eye1y, 0.9, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(eye2x, eye2y, 0.9, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Munn — form avhenger av unrest
+    const mouthDy = hr * 0.68;
+    const mx = hx + (0 * cosF - mouthDy * sinF);
+    const my = hy + (0 * sinF + mouthDy * cosF);
+    const mouthDrop = inm.unrest > 70 ? 1.0 : inm.unrest > 40 ? 0.5 : 0;
+    ctx.strokeStyle = 'rgba(0,0,0,0.65)'; ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    // Kurvet munn: hjørner faller med mouthDrop
+    ctx.moveTo(mx - 1.3 * cosF,             my - 1.3 * sinF + mouthDrop);
+    ctx.quadraticCurveTo(mx, my + mouthDrop * 0.4, mx + 1.3 * cosF, my + 1.3 * sinF + mouthDrop);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // ========== SKJEGG ==========
+  // Stubble: eksisterende dot-pattern, lavere alpha
+  if (look.beardStyle === 'stubble' && frontFacing > 0.25) {
+    ctx.save();
+    ctx.globalAlpha = (frontFacing - 0.25) / 0.75 * 0.70;
+    ctx.fillStyle = _darken(look.hairColor, 0.1);
+    const cosF2 = Math.cos(fwd), sinF2 = Math.sin(fwd);
+    const stubs = [
+      [-0.55, 0.58], [ 0.55, 0.58],
+      [-0.25, 0.75], [ 0.25, 0.75],
+      [ 0.00, 0.66],
+    ];
+    for (const [sx, sy] of stubs) {
+      const dx = sx * hr, dy = sy * hr;
+      const x = hx + (dx * cosF2 - dy * sinF2);
+      const y = hy + (dx * sinF2 + dy * cosF2);
+      ctx.beginPath(); ctx.arc(x, y, 0.55, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+  // Full: solid masse under haken — leser som mørk klump på avstand
+  else if (look.beardStyle === 'full' && frontFacing > 0.10) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, (frontFacing - 0.10) / 0.40) * 0.88;
+    ctx.fillStyle = _darken(look.hairColor, 0.18);
+    const cosF2 = Math.cos(fwd), sinF2 = Math.sin(fwd);
+    const bDy = hr * 0.64;
+    const bcx = hx + (0 * cosF2 - bDy * sinF2);
+    const bcy = hy + (0 * sinF2 + bDy * cosF2);
+    ctx.beginPath();
+    ctx.ellipse(bcx, bcy, hr * 0.58, hr * 0.42, fwd, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Gjeng-bandana (samme som eksisterende, tegnes øverst på panne)
+  if (inGang) {
+    ctx.save();
+    ctx.fillStyle = gangColor; ctx.globalAlpha = 0.72;
+    ctx.fillRect(hx - hr*1.05, hy - hr*0.18, hr*2.1, 2);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 // Statisk staff (kun visuell). Tegnes når aktivt for fasens zone.
 const STAFF_POSITIONS = [
   // Bak kantine-disken, i gapet mellom venstre og høyre bord-rad.
@@ -2882,15 +3731,116 @@ function renderInmates() {
     if (dimmed) { ctx.save(); ctx.globalAlpha = 0.18; }
 
     const { look } = inm;
-    const base = TILE * 0.29 * look.sizeFactor;
+    const base = TILE * 0.345 * look.sizeFactor;
     const br   = base * 0.56;   // body radius
     const hr   = base * 0.40;   // head radius
-    const bx   = inm.px, by = inm.py + base * 0.18;   // body centre
-    const hx   = inm.px, hy = inm.py - base * 0.44;   // head centre
+    // Push-offset etter tap (fades i tick)
+    const px = inm.px + inm.fightPushX;
+    const py = inm.py + inm.fightPushY;
+    // Lunge-offset — kun fighters "jabber" mot motstander
+    let lungeX = 0, lungeY = 0;
+    if (inm.inFight) {
+      const oppL = GS.inmates.find(x => x.id === inm.fightOpponent);
+      if (oppL) {
+        const ldx = oppL.px - inm.px, ldy = oppL.py - inm.py;
+        const ld  = Math.hypot(ldx, ldy) || 1;
+        const phase = Math.sin(Date.now() * 0.014 + inm.id * 1.7);
+        const amp = Math.max(0, phase) * 3.5;
+        lungeX = (ldx/ld) * amp;
+        lungeY = (ldy/ld) * amp;
+      }
+    }
+    const bx   = px + lungeX, by = py + lungeY + base * 0.18;   // body centre
+    const hx   = px + lungeX, hy = py + lungeY - base * 0.44;   // head centre
     const gangColor = GANG_COLOR[inm.groupId] || '#888';
     const inGang = inm.groupId != null;
 
-    drawShadow(inm.px, inm.py, base * 0.55);
+    // Blodpøl under taper — tegnes først, ligger på gulvet under alt
+    if (inm.bloodPoolMs > 0) {
+      const bt = Math.min(1, inm.bloodPoolMs / 3500);
+      ctx.save();
+      ctx.globalAlpha = 0.55 * bt;
+      ctx.fillStyle = '#8a1818';
+      ctx.beginPath();
+      ctx.ellipse(px, py + base * 0.6, base * 0.85, base * 0.35, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    drawShadow(px, py, base * 0.55);
+
+    // Liggende figur: roter 90° rundt senter, bevar klær/hud/hår. Hopper over
+    // dangerous-aura, status-emojis, fight-ring og søvn/mat-indikatorer.
+    if (inm.downedMs > 0) {
+      // Hover ring
+      if (inm.id === GS.hoverId && inm.id !== GS.selectedId) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(px, py, base + 3, 0, Math.PI*2); ctx.stroke();
+      }
+      // Selection ring
+      if (inm.id === GS.selectedId) {
+        ctx.strokeStyle = '#d8c058'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, py, base + 4, 0, Math.PI*2); ctx.stroke();
+      }
+
+      const bx = px, by = py + base * 0.18;
+      const hx = px, hy = py - base * 0.44;
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(Math.PI / 2);
+      ctx.translate(-px, -py);
+
+      // Body
+      ctx.fillStyle = look.clothColor;
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
+
+      // Head
+      ctx.fillStyle = look.skinTone;
+      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.stroke();
+
+      // Hair
+      if (look.hairStyle > 0) {
+        ctx.fillStyle = look.hairColor;
+        const capR = look.hairStyle === 2 ? hr * 1.18 : hr;
+        ctx.beginPath(); ctx.arc(hx, hy, capR, Math.PI, 0); ctx.fill();
+      }
+
+      // Beard (any style viser som solid semicircle i downed-mode)
+      if (look.beardStyle && look.beardStyle !== 'none') {
+        ctx.fillStyle = _darken(look.hairColor, 0.15);
+        ctx.beginPath(); ctx.arc(hx, hy + hr * 0.52, hr * 0.52, 0, Math.PI); ctx.fill();
+      }
+
+      ctx.restore();
+
+      if (dimmed) ctx.restore();
+      continue;
+    }
+
+    // Dangerous-aura: subtil rød puls for høy respekt / nylig vold / impulsive med uro.
+    // Undertrykkes under aktiv kamp slik at kampmarkøren har visuell prioritet.
+    if (!inm.inFight) {
+      const dangerous = inm.respekt > 70
+                     || inm.conflictCooldown > 0
+                     || (inm.temperament === 'impulsiv' && inm.unrest > 50);
+      if (dangerous) {
+        ctx.save();
+        const pulse = 0.10 + 0.05 * Math.sin(Date.now() * 0.004 + inm.id);
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = '#c03028';
+        ctx.beginPath(); ctx.arc(px, py, base + 5, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+    }
 
     // Highlight-ring for matchende innsatte når et gjeng-filter er aktivt.
     // Tegnes først, havner bak alt annet. Bruker gjeng-farge (eller nøytralt grå for "Ingen").
@@ -2898,101 +3848,27 @@ function renderInmates() {
       ctx.save();
       ctx.globalAlpha = 0.28;
       ctx.fillStyle = gangColor;
-      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 6, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px, py, base + 6, 0, Math.PI*2); ctx.fill();
       ctx.globalAlpha = 0.85;
       ctx.strokeStyle = gangColor;
       ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 6, 0, Math.PI*2); ctx.stroke();
-      ctx.restore();
-    }
-
-    // Gang glow — kun for gjeng-medlemmer
-    if (inGang) {
-      ctx.save();
-      ctx.globalAlpha = 0.13;
-      ctx.fillStyle = gangColor;
-      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 3.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px, py, base + 6, 0, Math.PI*2); ctx.stroke();
       ctx.restore();
     }
 
     // Hover ring
     if (inm.id === GS.hoverId && inm.id !== GS.selectedId) {
       ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 3, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(px, py, base + 3, 0, Math.PI*2); ctx.stroke();
     }
 
     // Selection ring
     if (inm.id === GS.selectedId) {
       ctx.strokeStyle = '#d8c058'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(inm.px, inm.py, base + 4, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(px, py, base + 4, 0, Math.PI*2); ctx.stroke();
     }
 
-    // Body (clothing colour)
-    ctx.fillStyle = look.clothColor;
-    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
-    // Intern skygge (nedre halvdel) for volum
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
-    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI); ctx.fill();
-    // Outline
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
-
-    // Gang chest symbol — kun for gjeng-medlemmer
-    if (inGang) {
-      ctx.save();
-      ctx.fillStyle = gangColor; ctx.globalAlpha = 0.82;
-      const ss = br * 0.48;
-      if (inm.groupId === 'A') {
-        ctx.beginPath(); ctx.moveTo(bx, by-ss); ctx.lineTo(bx+ss*0.85, by+ss*0.5); ctx.lineTo(bx-ss*0.85, by+ss*0.5); ctx.closePath(); ctx.fill();
-      } else if (inm.groupId === 'B') {
-        ctx.beginPath(); ctx.arc(bx, by, ss*0.6, 0, Math.PI*2); ctx.fill();
-      } else if (inm.groupId === 'C') {
-        ctx.fillRect(bx-ss*0.6, by-ss*0.6, ss*1.2, ss*1.2);
-      }
-      ctx.restore();
-    }
-
-    // Head (skin tone)
-    ctx.fillStyle = look.skinTone;
-    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
-    // Intern skygge (nedre halvdel)
-    ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI); ctx.fill();
-    // Outline
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.stroke();
-
-    // Hair
-    if (look.hairStyle > 0) {
-      ctx.fillStyle = look.hairColor;
-      const capR = look.hairStyle === 2 ? hr * 1.18 : hr;
-      ctx.beginPath(); ctx.arc(hx, hy, capR, Math.PI, 0); ctx.fill();
-    }
-
-    // Beard
-    if (look.beard) {
-      ctx.fillStyle = look.hairColor;
-      ctx.beginPath(); ctx.arc(hx, hy + hr * 0.52, hr * 0.52, 0, Math.PI); ctx.fill();
-    }
-
-    // Scar
-    if (look.scar) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(200,110,70,0.75)'; ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(hx - hr*0.35, hy - hr*0.25);
-      ctx.lineTo(hx + hr*0.20, hy + hr*0.35);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Gang bandana — kun for gjeng-medlemmer
-    if (inGang) {
-      ctx.save();
-      ctx.fillStyle = gangColor; ctx.globalAlpha = 0.70;
-      ctx.fillRect(hx - hr*1.05, hy - hr*0.18, hr*2.1, 2);
-      ctx.restore();
-    }
+    renderInmateDetailed(inm, px + lungeX, py + lungeY, base, deriveFacing(inm));
 
     // Shower effect — animated water droplets above head
     if (inm.zone === 'shower') {
@@ -3006,11 +3882,6 @@ function renderInmates() {
       ctx.restore();
     }
 
-    // Unrest indicator dot
-    const uc = inm.unrest>70 ? '#cc3030' : inm.unrest>40 ? '#c07828' : '#30904c';
-    ctx.fillStyle = uc;
-    ctx.beginPath(); ctx.arc(inm.px + base*0.55, inm.py - base*0.62, 2.5, 0, Math.PI*2); ctx.fill();
-
     // Status-emoji over hodet — rom-opphold > kamp > konflikt-flash > høy uro
     if (inm.isolationTicks > 0) {
       const icon = inm.postFightRoom === 'counseling' ? '💬'
@@ -3020,7 +3891,7 @@ function renderInmates() {
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(icon, inm.px, inm.py - base*1.9);
+      ctx.fillText(icon, px, py - base*1.9);
       ctx.restore();
     } else if (inm.inFight) {
       // Kamp-markør: pulserende ⚔️ + rød ring rundt innsatt
@@ -3030,13 +3901,32 @@ function renderInmates() {
       ctx.font = '18px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('⚔️', inm.px, inm.py - base*1.9);
+      ctx.fillText('⚔️', px, py - base*1.9);
       ctx.strokeStyle = `rgba(255,60,40,${0.4 + 0.5 * pulse})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(inm.px, inm.py, base * 1.2, 0, Math.PI * 2);
+      ctx.arc(px, py, base * 1.2, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
+
+      // Lokal impact-burst mellom de to fighterne — tegnes kun én gang per par
+      const opp = GS.inmates.find(x => x.id === inm.fightOpponent);
+      if (opp && inm.id < opp.id) {
+        const mx = (inm.px + opp.px) / 2;
+        const my = (inm.py + opp.py) / 2;
+        const beat = (Date.now() % 300) / 300;
+        if (beat < 0.40) {
+          const bt = 1 - (beat / 0.40);
+          ctx.save();
+          ctx.globalAlpha = 0.55 * bt;
+          ctx.fillStyle = '#e04028';
+          ctx.beginPath(); ctx.arc(mx, my, 10 + 6 * (1 - bt), 0, Math.PI*2); ctx.fill();
+          ctx.globalAlpha = 0.85 * bt;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.arc(mx, my, 3 + 2 * (1 - bt), 0, Math.PI*2); ctx.fill();
+          ctx.restore();
+        }
+      }
     } else if (inm.conflictFlashMs > 0) {
       const t = inm.conflictFlashMs / 1800;                      // 1..0 fade
       const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.02);
@@ -3045,7 +3935,7 @@ function renderInmates() {
       ctx.font = '16px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('💥', inm.px, inm.py - base*1.9);
+      ctx.fillText('💥', px, py - base*1.9);
       ctx.restore();
     } else if (inm.unrest > 70) {
       ctx.save();
@@ -3053,7 +3943,7 @@ function renderInmates() {
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('😰', inm.px, inm.py - base*1.9);
+      ctx.fillText('😰', px, py - base*1.9);
       ctx.restore();
     }
 
@@ -3066,17 +3956,6 @@ function renderInmates() {
       ctx.font = `bold ${TILE*0.55|0}px monospace`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('z', hx + base*0.5, hy - hr - base*0.7 + floatY);
-      ctx.restore();
-    }
-
-    // Eating indicator — visible only when fully seated at table
-    if (PHASE_ZONE[PHASES[GS.phaseIndex]] === 'cafeteria' && inm.cafState === 'seated') {
-      ctx.save();
-      ctx.globalAlpha = 0.60;
-      ctx.fillStyle = '#e8c878';
-      ctx.font = `bold ${TILE*0.50|0}px monospace`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('\u2227', hx, hy - hr - base*0.6);
       ctx.restore();
     }
 
@@ -3098,33 +3977,163 @@ function renderGuards() {
       ctx.restore();
     }
 
-    const base = TILE * 0.33;
-    const br   = base * 0.58;
-    const hr   = base * 0.40;
-    const bx   = g.px, by = g.py + base * 0.18;
-    const hx   = g.px, hy = g.py - base * 0.44;
+    const base   = TILE * 0.42;
+    const br     = base * 0.46;    // smalere kropp (var 0.58)
+    const hr     = base * 0.36;    // smalere hode (var 0.40)
+    const px     = g.px, py = g.py;
+    const facing = g.facing || 0;
 
     drawShadow(g.px, g.py, base * 0.55);
 
-    // Body — navy uniform
-    ctx.fillStyle = '#1e3a6e';
+    const now    = Date.now();
+    const moving = !!g._isMoving;
+    const verticality = moving ? Math.abs(Math.sin(facing)) : 1;
+    const animScale   = 0.4 + 0.6 * verticality;
+    const breath = 1 + 0.022 * Math.sin(now * 0.002 + g.px * 0.7);
+    const bob    = moving ? Math.sin(now * 0.012 + g.px) * 0.6 * animScale : 0;
+    const lean   = moving
+      ? Math.sin(facing - Math.PI/2) * 0.045 * animScale
+      : Math.sin(now * 0.001 + g.px) * 0.010;
+
+    const pivotY = py + base * 0.85;
+    ctx.save();
+    ctx.translate(px, pivotY);
+    ctx.rotate(lean);
+    ctx.scale(breath, breath);
+    ctx.translate(-px, -pivotY);
+
+    const bx = px,        by = py + base * 0.18 + bob;
+    const hx = px,        hy = py - base * 0.44 + bob;
+
+    const fwd   = facing - Math.PI/2;
+    const faceX = Math.sin(fwd);
+
+    const uniformColor = '#1e3a6e';
+    const pantsColor   = '#0e1a30';
+
+    // ========== BEIN ==========
+    const walkPhase = moving ? Math.sin(now * 0.012 + g.px) : 0;
+    const legBaseY  = py + base * 0.78;
+    const lLift = moving ? Math.max(0, walkPhase) * 0.8 * animScale : 0;
+    const rLift = moving ? Math.max(0, -walkPhase) * 0.8 * animScale : 0;
+    ctx.save();
+    ctx.fillStyle = pantsColor;
+    ctx.beginPath();
+    ctx.ellipse(px - br * 0.42, legBaseY - lLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(px + br * 0.42, legBaseY - rLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.ellipse(px - br * 0.42, legBaseY - lLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(px + br * 0.42, legBaseY - rLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+
+    // ========== SKO ==========
+    const shoeW = br * 0.38;
+    const shoeH = br * 0.22;
+    const shoeY = legBaseY + br * 0.50;
+    ctx.save();
+    ctx.fillStyle = '#141414';
+    ctx.beginPath(); ctx.ellipse(px - br * 0.42, shoeY - lLift, shoeW, shoeH, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(px + br * 0.42, shoeY - rLift, shoeW, shoeH, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.ellipse(px - br * 0.42, shoeY - lLift, shoeW, shoeH, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(px + br * 0.42, shoeY - rLift, shoeW, shoeH, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+
+    // ========== BAKRE ARM ==========
+    const armSway = moving ? Math.sin(now * 0.012 + g.px + Math.PI) * 1.0 * animScale : 0;
+    const armY    = by + br * 0.05;
+    const armLen  = br * 0.55;
+    const armWid  = br * 0.30;
+    const backArmX = bx + faceX * br * 1.05 * -1;
+    const backArmY = armY - armSway;
+    ctx.save();
+    ctx.fillStyle = _darken(uniformColor, 0.12);
+    ctx.beginPath();
+    ctx.ellipse(backArmX, backArmY, armWid, armLen, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.7;
+    ctx.stroke();
+    ctx.restore();
+
+    // ========== TORSO ==========
+    const torsoGrad = ctx.createRadialGradient(
+      bx - br * 0.25, by - br * 0.5, 0,
+      bx,             by,              br * 1.15
+    );
+    torsoGrad.addColorStop(0,   _lighten(uniformColor, 0.18));
+    torsoGrad.addColorStop(0.6, uniformColor);
+    torsoGrad.addColorStop(1,   _darken(uniformColor, 0.25));
+    ctx.fillStyle = torsoGrad;
     ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = '#2a5090'; ctx.lineWidth = 1;
+    // Skulder-stripe (mørkere navy)
+    ctx.save();
+    ctx.fillStyle = '#14264a';
+    ctx.fillRect(bx - br * 0.95, by - br * 0.65, br * 1.9, br * 0.32);
+    ctx.restore();
+    // Rim-light
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,245,220,0.30)'; ctx.lineWidth = 1.0;
+    ctx.beginPath(); ctx.arc(bx, by, br - 0.3, Math.PI * 1.05, Math.PI * 1.35); ctx.stroke();
+    ctx.restore();
+    // Outline
+    ctx.strokeStyle = '#050a18'; ctx.lineWidth = 1.0;
     ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
 
-    // Belt — gold stripe across body centre
+    // ========== BELTE + SKILT ==========
     ctx.fillStyle = '#c8a840';
-    ctx.fillRect(bx - br * 0.9, by - 1.5, br * 1.8, 2.5);
+    ctx.fillRect(bx - br * 0.92, by - 1.3, br * 1.84, 2.2);
+    ctx.fillStyle = '#e8c850';
+    ctx.beginPath(); ctx.arc(bx, by - br * 0.20, 2.0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.beginPath(); ctx.arc(bx - 0.5, by - br * 0.20 - 0.5, 0.7, 0, Math.PI*2); ctx.fill();
 
-    // Head — neutral skin tone
-    ctx.fillStyle = '#c09060';
+    // ========== FREMRE ARM ==========
+    const frontArmX = bx + faceX * br * 1.05;
+    const frontArmY = armY + armSway;
+    ctx.save();
+    ctx.fillStyle = uniformColor;
+    ctx.beginPath();
+    ctx.ellipse(frontArmX, frontArmY, armWid, armLen, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.restore();
+
+    // ========== NAKKE ==========
+    ctx.save();
+    ctx.fillStyle = _darken('#c09060', 0.25);
+    ctx.fillRect(hx - 1.2, hy + hr * 0.55, 2.4, base * 0.20);
+    ctx.restore();
+
+    // ========== HODE ==========
+    const skinTone = '#c09060';
+    const headGrad = ctx.createRadialGradient(
+      hx - hr * 0.3, hy - hr * 0.5, 0,
+      hx,            hy,             hr * 1.15
+    );
+    headGrad.addColorStop(0,   _lighten(skinTone, 0.15));
+    headGrad.addColorStop(0.6, skinTone);
+    headGrad.addColorStop(1,   _darken(skinTone, 0.22));
+    ctx.fillStyle = headGrad;
     ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.stroke();
 
-    // Cap — dark dome over top half of head
-    ctx.fillStyle = '#0f1e40';
-    ctx.beginPath(); ctx.arc(hx, hy, hr * 1.22, Math.PI, 0); ctx.fill();
-    // Cap brim — thin horizontal stripe at base of cap
+    // ========== CAP ==========
+    ctx.fillStyle = '#0e1a30';
+    ctx.beginPath(); ctx.arc(hx, hy, hr * 1.25, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.70)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.arc(hx, hy, hr * 1.25, Math.PI, 0); ctx.stroke();
+    // Brim
+    ctx.fillStyle = '#000000';
     ctx.fillRect(hx - hr * 1.35, hy - 1, hr * 2.7, 2);
+
+    ctx.restore(); // end breath/lean transform
 
     // Intervention emoji — synlig når vakten faktisk står og griper inn
     if (g.target && g.interventionTimer > 0) {
@@ -3666,6 +4675,47 @@ function renderStaff() {
   }
 }
 
+// Subtil outline rundt spesialrom (isolasjon, samtalerom, bibliotek, verksted).
+// Holder seg bevisst svak; dempes ytterligere om natten av phase-tint.
+function renderZoneOutlines() {
+  if (!GS.zoneBorders) return;
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.18;
+  let currentColor = null;
+  ctx.beginPath();
+  for (const s of GS.zoneBorders) {
+    if (s.color !== currentColor) {
+      if (currentColor) ctx.stroke();
+      ctx.strokeStyle = s.color;
+      ctx.beginPath();
+      currentColor = s.color;
+    }
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+  }
+  if (currentColor) ctx.stroke();
+  ctx.restore();
+}
+
+// Tynn mørk stripe under vegg-tiles for dybde mot gulv.
+function renderWallShadows() {
+  const T = TILE;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.20)';
+  for (let y = 0; y < ROWS - 1; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const t = GS.map[y]?.[x];
+      const tb = GS.map[y + 1]?.[x];
+      if (!t || !tb) continue;
+      if (t.type === 'wall' && tb.type !== 'wall') {
+        ctx.fillRect(x * T, (y + 1) * T, T, 3);
+      }
+    }
+  }
+  ctx.restore();
+}
+
 function renderTint() {
   const phase = PHASES[GS.phaseIndex];
   const tint = PHASE_TINT[phase];
@@ -3701,6 +4751,8 @@ function renderTint() {
 function render() {
   ctx.clearRect(0, 0, W, H);
   renderMap();
+  renderWallShadows();
+  renderZoneOutlines();
   renderLabels();
   renderDecor();
   renderInmates();
@@ -3718,14 +4770,13 @@ function render() {
 // UI UPDATE
 // ================================================================
 function respektLevel(r) {
-  if (r < 20) return 'Ingen respekt';
-  if (r < 40) return 'Lav respekt';
-  if (r < 60) return 'Respektert';
-  if (r < 80) return 'Høy respekt';
+  if (r < 10) return 'Lav';
+  if (r < 40) return 'Vanlig';
+  if (r < 70) return 'Respektert';
   return 'Fryktet';
 }
 function respektLevelShort(r) {
-  return respektLevel(r).replace(' respekt', '');
+  return respektLevel(r);
 }
 function respektColor(r) {
   if (r < 20) return '#556';
@@ -4012,9 +5063,20 @@ function updateUI() {
     if (!GS.departed.length) {
       dlog.innerHTML = '<div class="mlog" style="color:#444">Ingen har forlatt fengselet.</div>';
     } else {
-      dlog.innerHTML = GS.departed.map(d =>
-        `<div class="mlog"><span class="mlog-day">D${d.day}</span><span>${d.name} — ${d.reason}</span></div>`
-      ).join('');
+      const released = GS.departed.filter(d => d.reason.startsWith('Slapp ut'));
+      const died     = GS.departed.filter(d => !d.reason.startsWith('Slapp ut'));
+      const renderItem = d => `
+        <div class="departed-item">
+          <div class="departed-head">
+            <span class="mlog-day">D${d.day}</span>
+            <span class="departed-name">${d.name}</span>
+          </div>
+          <div class="departed-reason">${d.reason}</div>
+        </div>`;
+      const section = (title, items) => items.length
+        ? `<div class="departed-section">${title}</div>${items.map(renderItem).join('')}`
+        : '';
+      dlog.innerHTML = section('Døde', died) + section('Slapp ut', released);
     }
   }
 
@@ -4067,6 +5129,7 @@ function updateUI() {
         })()
       }</span></div>
       ${(() => {
+        if (sel.unrest < 70) return '';
         const rs = unrestReasons(sel);
         if (!rs.length) return '';
         return `<div class="dr" style="margin-top:6px"><span class="dl">Uro-årsak</span></div>` +
@@ -4084,9 +5147,38 @@ function updateUI() {
         <div class="dr"><span class="dl">Respekt</span><span class="dv">${sel.respekt} <span style="color:#889">(${respektLevelShort(sel.respekt)})</span></span></div>
         <div class="dr"><span class="dl">Gjengleder</span><span class="dv">${GS._leaders && sel.groupId && GS._leaders[sel.groupId] === sel.id ? 'Ja' : 'Nei'}</span></div>
       ` : ''}
+      ${(() => {
+        if (!sel.memories || !sel.memories.length) return '';
+        const counts = { loss:0, win:0, friend_died:0, isolation_after_fight:0 };
+        for (const m of sel.memories) if (counts[m.type] != null) counts[m.type]++;
+        const parts = [];
+        if (counts.loss) parts.push(`${counts.loss} tap`);
+        if (counts.win)  parts.push(`${counts.win} seier${counts.win > 1 ? 'e' : ''}`);
+        if (counts.friend_died) parts.push(`${counts.friend_died} mistet venn`);
+        if (counts.isolation_after_fight) parts.push(`${counts.isolation_after_fight} isolat`);
+        if (!parts.length) return '';
+        return `<div class="dr" style="margin-top:6px"><span class="dl">Bærer med seg</span><span class="dv" style="color:#a89a78">${parts.join(' · ')}</span></div>`;
+      })()}
+      ${(() => {
+        const grudges = getGrudgeTargets(sel);
+        if (!grudges.length) return '';
+        return `<div class="dr" style="margin-top:6px"><span class="dl">Grudge mot</span></div>` +
+          grudges.slice(0, 2).map(g => {
+            const other = GS.inmates.find(x => x.id === g.id);
+            const name = other ? other.name : '(borte)';
+            return `<div class="dr"><span class="dv" style="color:#c04040;font-size:0.72rem">&bull; ${name}</span></div>`;
+          }).join('');
+      })()}
+      ${(() => {
+        if (!sel.ambition) return '';
+        const label = goalLabel(sel.ambition);
+        if (!label) return '';
+        const tick = sel.ambitionAchieved ? ' <span style="color:#8ac060">✓</span>' : '';
+        return `<div class="dr" style="margin-top:6px"><span class="dl">Mål</span><span class="dv">${label}${tick}</span></div>`;
+      })()}
       ${sel.history && sel.history.length ? `
         <div class="dr" style="margin-top:6px"><span class="dl">Historikk</span></div>
-        ${sel.history.map(h => `<div class="dr"><span class="dv" style="color:#8a9098;font-size:0.72rem">&bull; ${h}</span></div>`).join('')}
+        ${sel.history.map(h => `<div class="dr"><span class="dv" style="color:#8a9098;font-size:0.72rem">&bull; ${historyRender(h)}</span></div>`).join('')}
       ` : ''}`;
   } else {
     dp.innerHTML = '<span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>';
@@ -4108,6 +5200,7 @@ document.querySelectorAll('.tb').forEach(btn => {
     const tab = btn.dataset.tab;
     document.querySelectorAll('.tb').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.tabpane').forEach(p => p.classList.toggle('on', p.dataset.tab === tab));
+    document.getElementById('detail').style.display = (tab === 'innsatte') ? '' : 'none';
   });
 });
 
@@ -4280,7 +5373,11 @@ function saveGame() {
       isFloorSleeper: inm.isFloorSleeper,
       hasDominatedForBed: inm.hasDominatedForBed,
       ambition: inm.ambition,
+      ambitionAchieved: inm.ambitionAchieved,
       targetId: inm.targetId,
+      lastFightOpponent: inm.lastFightOpponent,
+      lastFightDay: inm.lastFightDay,
+      memories: inm.memories,
     })),
     guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi })),
     stats: { ...GS.stats },
@@ -4299,6 +5396,7 @@ function loadGame() {
   if (!raw) return false;
   const data = JSON.parse(raw);
   GS.map = buildMap();
+  GS.zoneBorders = computeZoneBorders();
   GS.day = data.day; GS.phaseIndex = data.phaseIndex;
   GS.phaseTick = data.phaseTick; GS.speed = data.speed;
   GS.stats = Object.assign(defaultStats(), data.stats || {});
@@ -4323,8 +5421,20 @@ function loadGame() {
     if (typeof inm.isBored !== 'boolean') inm.isBored = false;
     if (typeof inm.isFloorSleeper !== 'boolean')     inm.isFloorSleeper = false;
     if (typeof inm.hasDominatedForBed !== 'boolean') inm.hasDominatedForBed = false;
-    if (inm.ambition !== 'take_over') inm.ambition = null;
+    const VALID_AMBITIONS = new Set(['take_over','survive','climb','make_friend','no_isolation','prove_strength']);
+    if (!VALID_AMBITIONS.has(inm.ambition)) inm.ambition = null;
+    if (typeof inm.ambitionAchieved !== 'boolean') inm.ambitionAchieved = false;
+    if (typeof inm.downedMs !== 'number') inm.downedMs = 0;
+    if (typeof inm.bloodPoolMs !== 'number') inm.bloodPoolMs = 0;
+    if (typeof inm.fightPushX !== 'number') inm.fightPushX = 0;
+    if (typeof inm.fightPushY !== 'number') inm.fightPushY = 0;
+    if (typeof inm._facing !== 'number') inm._facing = Math.PI / 2;
+    if (typeof inm._isMoving !== 'boolean') inm._isMoving = false;
+    if (typeof inm.guardNoticedFight !== 'boolean') inm.guardNoticedFight = true;
     if (typeof inm.targetId !== 'number') inm.targetId = null;
+    if (typeof inm.lastFightOpponent !== 'string') inm.lastFightOpponent = null;
+    if (typeof inm.lastFightDay !== 'number')      inm.lastFightDay = null;
+    if (!Array.isArray(inm.memories))              inm.memories = [];
     inm._wasInWorkshop = inm.zone === 'workshop';
     if (typeof inm.respekt !== 'number') {
       inm.respekt = (typeof inm.ry === 'number') ? inm.ry : 0;
@@ -4334,6 +5444,22 @@ function loadGame() {
     if (typeof inm.fightsLost !== 'number') inm.fightsLost = 0;
     if (typeof inm.friendshipsMade !== 'number') inm.friendshipsMade = 0;
     if (typeof inm.counselingCount !== 'number') inm.counselingCount = 0;
+    if (inm.look) {
+      if (typeof inm.look.build !== 'number')        inm.look.build = 1.0;
+      if (typeof inm.look.heightFactor !== 'number') inm.look.heightFactor = 1.0;
+      if (typeof inm.look.shoeColor !== 'string')    inm.look.shoeColor = '#141414';
+      if (typeof inm.look.pantsColor !== 'string')   inm.look.pantsColor = '#2a2418';
+      if (inm.look.jacketColor === undefined)        inm.look.jacketColor = null;
+      if (typeof inm.look.beardStyle !== 'string') {
+        inm.look.beardStyle = inm.look.beard === true ? 'stubble' : 'none';
+      }
+      if (typeof inm.look.hairStyle !== 'number') inm.look.hairStyle = 0;
+      if (typeof inm.look.hairColor !== 'string') inm.look.hairColor = '#3a2e22';
+      delete inm.look.beard;
+      delete inm.look.scar;
+      delete inm.look.tattoo;
+      delete inm.look.browStyle;
+    }
     inm._wasInLibrary = inm.zone === 'library';
     inm.waypoints = [];
     inm.currentSpotId = null;
@@ -4362,6 +5488,7 @@ function startGame(fromSave = false) {
     if (!loadGame()) { alert('Ingen lagret data funnet.'); return; }
   } else {
     GS.map = buildMap();
+    GS.zoneBorders = computeZoneBorders();
     GS.day = 1; GS.phaseIndex = 0; GS.phaseTick = 0;
     GS.stats = defaultStats();
     GS.playerId = null;
