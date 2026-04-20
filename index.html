@@ -176,8 +176,9 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.9.25 &bull; 2025</p>
+  <p>Panoptikon v0.9.34 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
+  <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-continue" disabled>Continue</button>
   <button class="mb" id="btn-load" disabled>Load</button>
 </div>
@@ -185,7 +186,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.9.25</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.9.34</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -441,52 +442,87 @@ function drawTable(ctx, px, py, T) {
 
 function drawGymFloor(ctx, px, py, T) {
   const v = (px/T*5 + py/T*7) % 3;
-  ctx.fillStyle = v<1 ? '#4a2626' : v<2 ? '#452424' : '#402020';
+  ctx.fillStyle = v<1 ? '#3e2424' : v<2 ? '#392222' : '#342020';
   ctx.fillRect(px, py, T, T);
-  ctx.strokeStyle = '#2a1a1a'; ctx.lineWidth = 0.5;
+  // Gummimatte-kant (tykkere, mørk)
+  ctx.strokeStyle = '#1a0f0f'; ctx.lineWidth = 0.8;
   ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
-  if (((px/T*17 + py/T*23) % 31) < 1) {
-    ctx.fillStyle = 'rgba(0,0,0,0.05)';
-    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
-  }
-  if (((px/T*7 + py/T*19) % 41) < 1) {
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
-  }
+  // Indre 1/4-fuge — antyder sammenføyde matter
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(px + T/2, py); ctx.lineTo(px + T/2, py + T);
+  ctx.moveTo(px, py + T/2); ctx.lineTo(px + T, py + T/2);
+  ctx.stroke();
+  // Svakt amber støvhint i ett hjørne
+  ctx.fillStyle = 'rgba(180,100,40,0.03)';
+  ctx.fillRect(px + T - 4, py + T - 4, 3, 3);
 }
 
 function drawShowerFloor(ctx, px, py, T) {
   const v = (px/T*7 + py/T*5) % 3;
-  ctx.fillStyle = v<1 ? '#263244' : v<2 ? '#243040' : '#283448';
+  ctx.fillStyle = v<1 ? '#213a4e' : v<2 ? '#1f3646' : '#24405a';
   ctx.fillRect(px, py, T, T);
-  ctx.strokeStyle = '#1a2436'; ctx.lineWidth = 0.5;
+  // Tydelig flisefuge (tykkere, mørkere grout)
+  ctx.strokeStyle = '#121e2c'; ctx.lineWidth = 0.9;
   ctx.strokeRect(px+0.5, py+0.5, T-1, T-1);
-  ctx.fillStyle = 'rgba(120,170,240,0.10)';
-  ctx.fillRect(px+2, py+2, T-4, T-4);
-  if (((px/T*17 + py/T*23) % 31) < 1) {
-    ctx.fillStyle = 'rgba(0,0,0,0.05)';
-    ctx.fillRect(px + 3 + ((px+py)/T|0)%4, py + 4 + ((px*3+py)/T|0)%5, 4, 3);
+  // 1/4-flis-delelinje (antyder mindre fliser)
+  ctx.strokeStyle = 'rgba(10,18,28,0.45)'; ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(px + T/2, py); ctx.lineTo(px + T/2, py + T);
+  ctx.moveTo(px, py + T/2); ctx.lineTo(px + T, py + T/2);
+  ctx.stroke();
+  // Våt høydelys — øvre venstre hjørne
+  ctx.fillStyle = 'rgba(180,210,240,0.08)';
+  ctx.fillRect(px+1, py+1, T-2, 1);
+  ctx.fillRect(px+1, py+1, 1, T-2);
+  // Slitasje og flekker (deterministisk hash — samme fliser hver frame)
+  const hash = ((px * 13 + py * 29) | 0) % 97;
+  if (hash < 14) {
+    ctx.fillStyle = 'rgba(20,30,40,0.28)';
+    const fx = px + (hash % 5) + 2;
+    const fy = py + ((hash * 3) % 6) + 2;
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, 4 + (hash % 3), 2 + (hash % 2), 0, 0, Math.PI*2);
+    ctx.fill();
   }
-  if (((px/T*7 + py/T*19) % 41) < 1) {
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    ctx.fillRect(px + 5 + ((px+py*2)/T|0)%5, py + 8 + ((px*5+py)/T|0)%4, 3, 2);
+  if (hash > 40 && hash < 48) {
+    ctx.strokeStyle = 'rgba(10,15,25,0.35)'; ctx.lineWidth = 0.5;
+    const cx = px + (hash % 8);
+    const cy = py + (hash * 2 % 10);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy); ctx.lineTo(cx + 5, cy + 3);
+    ctx.stroke();
   }
 }
 
 function drawShowerHead(ctx, px, py, T) {
   drawShowerFloor(ctx, px, py, T);
-  // Stall border
-  ctx.strokeStyle = 'rgba(140,190,255,0.22)'; ctx.lineWidth = 1;
-  ctx.strokeRect(px+2, py+2, T-4, T-4);
-  // Nozzle pipe (vertical line from top)
-  ctx.strokeStyle = 'rgba(160,200,255,0.35)'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(px+T/2, py+3); ctx.lineTo(px+T/2, py+T*0.45|0); ctx.stroke();
-  // Nozzle head (small horizontal bar)
-  ctx.beginPath(); ctx.moveTo(px+T/2-3, py+T*0.45|0); ctx.lineTo(px+T/2+3, py+T*0.45|0); ctx.stroke();
-  // Water droplets (3 tiny dots below nozzle)
-  ctx.fillStyle = 'rgba(140,200,255,0.40)';
-  for (let i = -1; i <= 1; i++) {
-    ctx.beginPath(); ctx.arc(px+T/2 + i*3, py+T*0.65|0, 1, 0, Math.PI*2); ctx.fill();
+  const pipeX = px + T/2;
+  const headY = py + T * 0.55;
+  // Vertikal pipe fra bakvegg ned til hode
+  ctx.strokeStyle = '#8892a0'; ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.moveTo(pipeX, py - 2); ctx.lineTo(pipeX, headY - 1); ctx.stroke();
+  // Pipe-refleks
+  ctx.strokeStyle = 'rgba(220,230,240,0.45)'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(pipeX - 0.7, py - 2); ctx.lineTo(pipeX - 0.7, headY - 2); ctx.stroke();
+  // Arm ut fra pipe
+  ctx.strokeStyle = '#6a7280'; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(pipeX - 3, headY - 1); ctx.lineTo(pipeX + 3, headY - 1); ctx.stroke();
+  // Nozzle — krom-gradient ellipse
+  const ng = ctx.createRadialGradient(pipeX - 1, headY - 0.5, 0, pipeX, headY, 4);
+  ng.addColorStop(0, '#d8e0ea');
+  ng.addColorStop(0.5, '#88929e');
+  ng.addColorStop(1, '#3a424c');
+  ctx.fillStyle = ng;
+  ctx.beginPath(); ctx.ellipse(pipeX, headY + 1, 4.2, 2.4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#2a303a'; ctx.lineWidth = 0.6;
+  ctx.stroke();
+  // Dråpe-vifte
+  const opacs = [0.50, 0.40, 0.60, 0.38, 0.48];
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = `rgba(160,210,255,${opacs[i]})`;
+    const dx = (i - 2) * 2.3;
+    ctx.beginPath(); ctx.arc(pipeX + dx, py + T * 0.78, 1.0, 0, Math.PI*2); ctx.fill();
   }
 }
 
@@ -839,6 +875,9 @@ const GS = {
   powerLog:        [],
   topDogId:        null,
   departed:        [],   // tidligere innsatte {id, name, day, reason}
+  activeRat:       null, // runtime rotte-animasjon i dusj — {sx,sy,ex,ey,startedAt,durationMs}
+  mode:            'normal',   // 'normal' | 'lastManStanding'
+  winnerId:        null,       // satt når lastManStanding er avgjort
 };
 function defaultStats() {
   return { isolation:0, counseling:0, library:0, workshop:0, fights:0, friendships:0, disappeared:0 };
@@ -1595,7 +1634,7 @@ class Inmate {
     this.memories            = [];     // {type, day, otherId, otherName, weight} — maks MEMORY_MAX
 
     // Core stats
-    this.unrest   = 10 + Math.random()*20;
+    this.unrest   = (GS.mode === 'lastManStanding' ? 25 : 10) + Math.random()*20;
     this.health   = 80 + Math.random()*20;
     this.energi   = 40 + Math.random()*60;   // 0–100, drains when active, recharges at night
     this.hygiene  = 40 + Math.random()*60;   // 0–100, drains over time, recharges in shower
@@ -1650,6 +1689,7 @@ class Inmate {
     // Render-state: retning + bevegelsesflagg (brukes av detaljert render)
     this._facing          = Math.PI / 2;   // radianer, default = sør (mot kamera)
     this._isMoving        = false;
+    this._walkPhase       = 0;             // akkumulert forflytning (px) — driver stride-animasjon
 
     // Rom-opphold etter kamp: hvilken type sone vi er i
     // 'isolation' | 'counseling' | 'library' | null
@@ -1671,6 +1711,9 @@ class Inmate {
     this.lastWorkshopDay = null;
     this.isBored         = false;
     this._wasInWorkshop  = false;
+
+    // Småprat-boble (v0.9.32) — visuelt kun, ingen stats-effekt
+    this._chatMs         = 0;
 
     // Starting position — spawnNewcomer konstruerer med null cellId og setter px/py selv
     const def = getCellDef(cellId);
@@ -1830,8 +1873,15 @@ class Inmate {
       const isInBed      = this.sleepState === 'in_bed';
       const isOnFloor    = this.sleepState === 'on_floor';
       const isIntervened = this.isBeingIntervened;
-      if (!isNight && !isShower && !isSeated && !isInBed && !isOnFloor && !isIntervened && Math.random() < 0.001) {
-        this.waypoints = buildPath(this, this.targetZone);
+      // Idle micro-wander (v0.9.32): sporadisk liten forflytning innen samme sone.
+      // Bruker fallbackPos som gir walkable tile — ingen ny path-logikk.
+      const canWander = !isNight && !isShower && !isSeated && !isInBed && !isOnFloor && !isIntervened;
+      if (canWander && Math.random() < 0.0018) {
+        const def = getCellDef(this.cellId);
+        const target = fallbackPos(this.zone, def, this.groupId);
+        if (target && Math.hypot(target.px - this.px, target.py - this.py) > TILE * 0.8) {
+          this.waypoints = [{ px: target.px, py: target.py }];
+        }
       }
       return;
     }
@@ -1848,6 +1898,7 @@ class Inmate {
       this.py += dy/d * spd;
       this._facing  = Math.atan2(dy, dx);
       this._isMoving = true;
+      this._walkPhase += spd;
     }
   }
 }
@@ -1868,6 +1919,8 @@ class Guard {
     this._isMoving         = false; // settes av move() for patrulje-aura
     this.pauseUntil        = 0;     // ms-timestamp — stå stille til denne
     this.facing            = 0;     // radianer, for render + glance-retning
+    this._walkPhase        = 0;     // akkumulert forflytning (px) — driver stride-animasjon
+    this._seed             = Math.random() * 1000; // stabil seed for breath/idle-sway
   }
 
   move(dt) {
@@ -1935,6 +1988,7 @@ class Guard {
           this.py += dy/d * spd;
           this._isMoving = true;
           this.facing = Math.atan2(dy, dx);
+          this._walkPhase += spd;
         }
       }
       return;
@@ -1979,6 +2033,7 @@ class Guard {
       this.py += dy/d * spd;
       this._isMoving = true;
       this.facing = Math.atan2(dy, dx);
+      this._walkPhase += spd;
     }
   }
 }
@@ -2029,6 +2084,7 @@ function pickTakeOverTarget() {
 }
 
 function spawnNewcomer() {
+  if (GS.mode === 'lastManStanding') return null;
   // Tell opp per celle
   const cellCounts = {};
   const cellFloorOccupied = {};
@@ -2210,9 +2266,19 @@ function removeInmate(i, reasonOverride = null) {
   GS.stats.disappeared++;
   GS.inmates.splice(i, 1);
 
-  const fresh = new Inmate(cellId);
-  fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
-  GS.inmates.push(fresh);
+  if (GS.mode === 'lastManStanding') {
+    addPowerEvent('ambition',
+      `🩸 ${inm.name} er ute av spillet (${GS.inmates.length} igjen).`);
+    if (GS.winnerId == null && GS.inmates.length === 1) {
+      GS.winnerId = GS.inmates[0].id;
+      addPowerEvent('ambition',
+        `👑 ${GS.inmates[0].name} er siste mann stående — vinneren!`);
+    }
+  } else {
+    const fresh = new Inmate(cellId);
+    fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
+    GS.inmates.push(fresh);
+  }
 
   if (wasKarismatisk) assignIdols();
 }
@@ -2775,9 +2841,11 @@ function tick() {
           }
           addDeparted(leaving, 'Slapp ut etter endt soning');
           GS.inmates.splice(i, 1);
-          const fresh = new Inmate(cellId);
-          fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
-          GS.inmates.push(fresh);
+          if (GS.mode !== 'lastManStanding') {
+            const fresh = new Inmate(cellId);
+            fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
+            GS.inmates.push(fresh);
+          }
         }
       }
     }
@@ -2798,8 +2866,16 @@ function tick() {
       if (GS.inmates[i].aktivitet === 'arbeid' && workshopHasSpot()) {
         targetZone = 'workshop';
       }
-      const delay = i * 350 + Math.random() * 200;
-      GS.inmates[i].setTargetZone(targetZone, delay);
+      // Variert fasestagger med personlighet (v0.9.32): 0–5.5s spredning,
+      // ±1s forskyvning basert på kvirk/temperament — impulsive først, nervøse sist.
+      const inm = GS.inmates[i];
+      const pBias = inm.kvirk === 'impulsiv'             ? -800
+                  : inm.temperament === 'aggressive'     ? -400
+                  : inm.temperament === 'calm'           ? +600
+                  : inm.kvirk === 'nervøs'               ? +1100
+                  : 0;
+      const delay = Math.max(0, Math.random() * 5500 + pBias);
+      inm.setTargetZone(targetZone, delay);
     }
     // Ritual / Samling: i Ettermiddag, hvis en karismatisk er fri, samles hun og fanatiske i samme sone
     if (newPhase === 'Ettermiddag') {
@@ -2872,6 +2948,23 @@ function tick() {
             other.kvirk === 'impulsiv';
           if (otherIsDangerous && inm.respekt < other.respekt - 20 && inm.stressTolerance === 'low') {
             delta += 0.20 * prox;
+          }
+          // Småprat-boble (v0.9.32): sporadisk 💬 over to idle innsatte som står nær.
+          // Kun én gang per par (other.id > inm.id), ingen stats-effekt.
+          if (other.id > inm.id && d < TILE * 2
+              && inm._chatMs === 0 && other._chatMs === 0
+              && !inm.inFight && !other.inFight
+              && inm.downedMs === 0 && other.downedMs === 0
+              && inm.isolationTicks === 0 && other.isolationTicks === 0
+              && inm.cafState !== 'to_seat' && other.cafState !== 'to_seat'
+              && !grudgeIds.has(other.id)) {
+            let roll = 0.0035;
+            if (inm.friendId === other.id || other.friendId === inm.id) roll *= 3;
+            else if (inm.groupId && inm.groupId === other.groupId)      roll *= 2;
+            if (Math.random() < roll) {
+              inm._chatMs = 1800;
+              other._chatMs = 1800;
+            }
           }
         }
       }
@@ -2986,6 +3079,8 @@ function tick() {
       inm.conflictFlashMs = Math.max(0, inm.conflictFlashMs - TICK_MS);
       if (inm.conflictFlashMs === 0) inm.inConflict = false;
     }
+    // Chat-boble decay (v0.9.32)
+    if (inm._chatMs > 0) inm._chatMs = Math.max(0, inm._chatMs - TICK_MS);
     // downed-timer: ligger nede etter tapt kamp, blokkerer bevegelse
     if (inm.downedMs > 0) inm.downedMs = Math.max(0, inm.downedMs - TICK_MS);
     // blodpøl-nedtelling etter tap
@@ -3078,6 +3173,24 @@ function tick() {
     : 0;
 
   if (GS.gangwarFlashMs > 0) GS.gangwarFlashMs = Math.max(0, GS.gangwarFlashMs - TICK_MS);
+
+  // Sjelden rotte-spawn i dusjen — maks én aktiv om gangen
+  if (!GS.activeRat && Math.random() < 0.004) {
+    const drains = [
+      { x: 25.5 * TILE, y: 20.5 * TILE },
+      { x: 29.5 * TILE, y: 20.5 * TILE },
+      { x: 33.5 * TILE, y: 20.5 * TILE },
+    ];
+    const ai = Math.floor(Math.random() * 3);
+    let bi = Math.floor(Math.random() * 3);
+    while (bi === ai) bi = Math.floor(Math.random() * 3);
+    GS.activeRat = {
+      sx: drains[ai].x, sy: drains[ai].y,
+      ex: drains[bi].x, ey: drains[bi].y,
+      startedAt: Date.now(),
+      durationMs: 900 + Math.random() * 500,
+    };
+  }
 }
 
 // ================================================================
@@ -3206,12 +3319,13 @@ function renderInmateDetailed(inm, px, py, base, facing) {
 
   // Pust + walk/idle animasjoner
   const now     = Date.now();
-  const breath  = 1 + 0.025 * Math.sin(now * 0.002 + inm.id * 0.7);
+  const breath  = 1 + 0.020 * Math.sin(now * 0.002 + inm.id * 0.7);
   const moving  = !!inm._isMoving && !inm.inFight && inm.downedMs === 0;
-  const bob     = moving ? Math.sin(now * 0.012 + inm.id) * 0.7 : 0;
+  const phase   = (inm._walkPhase || 0) * 0.18;   // distansebasert stride-fase
+  const bob     = moving ? Math.sin(phase) * 0.45 : 0;
   const lean    = moving
-    ? Math.sin((facing - Math.PI/2)) * 0.052   // ~3° mot gang-retning
-    : Math.sin(now * 0.001 + inm.id) * 0.012;  // idle-sway ~0.7°
+    ? Math.sin((facing - Math.PI/2)) * 0.035
+    : Math.sin(now * 0.0009 + inm.id) * 0.006;
 
   // Pivot ved fotpunkt, så lean + breath roterer naturlig
   const pivotY = py + base * 0.85;
@@ -3237,19 +3351,19 @@ function renderInmateDetailed(inm, px, py, base, facing) {
   const sideFacing  = Math.abs(faceX);           // 0..1 (for øre)
 
   // ========== BEIN ==========
-  // Walk-fase: ett bein forover, ett bak, alternerende
-  const walkPhase = moving ? Math.sin(now * 0.012 + inm.id) : 0;
+  // Walk-fase: ett bein forover, ett bak, alternerende — drevet av distanse
+  const walkPhase = moving ? Math.sin(phase) : 0;
   const pantsColor = look.pantsColor || _darken(look.clothColor, 0.32);
   const legBaseY = py + base * 0.78 * tall;
   ctx.save();
   ctx.fillStyle = pantsColor;
   // Venstre bein
-  const lLift = moving ? Math.max(0, walkPhase) * 0.8 : 0;
+  const lLift = moving ? Math.max(0, walkPhase) * 0.65 : 0;
   ctx.beginPath();
   ctx.ellipse(px - br * 0.42, legBaseY - lLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2);
   ctx.fill();
   // Høyre bein
-  const rLift = moving ? Math.max(0, -walkPhase) * 0.8 : 0;
+  const rLift = moving ? Math.max(0, -walkPhase) * 0.65 : 0;
   ctx.beginPath();
   ctx.ellipse(px + br * 0.42, legBaseY - rLift, br * 0.33, br * 0.60, 0, 0, Math.PI*2);
   ctx.fill();
@@ -3278,7 +3392,7 @@ function renderInmateDetailed(inm, px, py, base, facing) {
 
   // ========== BAKRE ARM ==========
   // Arm motsatt facing — tegnes først så fremre arm overlapper
-  const armSway = moving ? Math.sin(now * 0.012 + inm.id + Math.PI) * 1.0 : 0;
+  const armSway = moving ? Math.sin(phase + Math.PI) * 0.8 : 0;
   const armY    = by + br * 0.05;
   const armLen  = br * 0.55;
   const armWid  = br * 0.30;
@@ -3668,6 +3782,14 @@ const STATIC_DECOR = [
   { type: 'weightRack', x: 17*TILE, y: 18*TILE }, // col 17 row 18 floor
   { type: 'gymBench',   x: 13*TILE, y: 20*TILE }, // col 13 row 20 floor
   { type: 'mirror',     x: 18*TILE, y: 20*TILE }, // col 18 row 20 floor
+  { type: 'dumbbellRack', x: 11*TILE, y: 17*TILE }, // oppå equipment-tile
+
+  // ── Dusj-dekor (cols 24–34, rows 17–21) ─────────────────────────
+  { type: 'showerBench', x: 25*TILE,   y: 21*TILE },
+  { type: 'showerBench', x: 31*TILE,   y: 21*TILE },
+  { type: 'showerDrain', x: 25.5*TILE, y: 20.5*TILE },
+  { type: 'showerDrain', x: 29.5*TILE, y: 20.5*TILE },
+  { type: 'showerDrain', x: 33.5*TILE, y: 20.5*TILE },
 
   // ── Kantine-brett (fase-betinget: kun under måltider) ───────────
   { type: 'tray', x: 5*TILE,  y: 6*TILE, activeWhenPhase: ['Morgen','Ettermiddag'] },
@@ -3945,6 +4067,16 @@ function renderInmates() {
       ctx.textBaseline = 'middle';
       ctx.fillText('😰', px, py - base*1.9);
       ctx.restore();
+    } else if (inm._chatMs > 0) {
+      // Småprat-boble (v0.9.32): lav prioritet, fades ut, ingen stats-effekt
+      const t = inm._chatMs / 1800;
+      ctx.save();
+      ctx.globalAlpha = 0.85 * t;
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('💬', px, py - base*1.9);
+      ctx.restore();
     }
 
     // Sleep indicator — visible only when actually lying in bed
@@ -3989,11 +4121,13 @@ function renderGuards() {
     const moving = !!g._isMoving;
     const verticality = moving ? Math.abs(Math.sin(facing)) : 1;
     const animScale   = 0.4 + 0.6 * verticality;
-    const breath = 1 + 0.022 * Math.sin(now * 0.002 + g.px * 0.7);
-    const bob    = moving ? Math.sin(now * 0.012 + g.px) * 0.6 * animScale : 0;
+    const seed   = g._seed || 0;
+    const phase  = (g._walkPhase || 0) * 0.18;
+    const breath = 1 + 0.020 * Math.sin(now * 0.002 + seed);
+    const bob    = moving ? Math.sin(phase) * 0.45 * animScale : 0;
     const lean   = moving
-      ? Math.sin(facing - Math.PI/2) * 0.045 * animScale
-      : Math.sin(now * 0.001 + g.px) * 0.010;
+      ? Math.sin(facing - Math.PI/2) * 0.035 * animScale
+      : Math.sin(now * 0.0009 + seed) * 0.006;
 
     const pivotY = py + base * 0.85;
     ctx.save();
@@ -4012,10 +4146,10 @@ function renderGuards() {
     const pantsColor   = '#0e1a30';
 
     // ========== BEIN ==========
-    const walkPhase = moving ? Math.sin(now * 0.012 + g.px) : 0;
+    const walkPhase = moving ? Math.sin(phase) : 0;
     const legBaseY  = py + base * 0.78;
-    const lLift = moving ? Math.max(0, walkPhase) * 0.8 * animScale : 0;
-    const rLift = moving ? Math.max(0, -walkPhase) * 0.8 * animScale : 0;
+    const lLift = moving ? Math.max(0, walkPhase) * 0.65 * animScale : 0;
+    const rLift = moving ? Math.max(0, -walkPhase) * 0.65 * animScale : 0;
     ctx.save();
     ctx.fillStyle = pantsColor;
     ctx.beginPath();
@@ -4045,7 +4179,7 @@ function renderGuards() {
     ctx.restore();
 
     // ========== BAKRE ARM ==========
-    const armSway = moving ? Math.sin(now * 0.012 + g.px + Math.PI) * 1.0 * animScale : 0;
+    const armSway = moving ? Math.sin(phase + Math.PI) * 0.8 * animScale : 0;
     const armY    = by + br * 0.05;
     const armLen  = br * 0.55;
     const armWid  = br * 0.30;
@@ -4373,26 +4507,32 @@ function renderDecor() {
         break;
       }
       case 'weightRack': {
-        const w = T * 0.9, h = T * 0.45;
+        const w = T * 0.9, h = T * 0.48;
         const bx = d.x + (T - w) / 2, by = d.y + 3;
-        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
         ctx.fillRect(bx, by + h, w, 2);
         // Stativ-bein
-        ctx.fillStyle = '#3a3a3a';
-        ctx.fillRect(bx, by, 2, h);
-        ctx.fillRect(bx + w - 2, by, 2, h);
-        // Stang (horisontal)
-        ctx.fillStyle = '#606060';
-        ctx.fillRect(bx - 2, by + 3, w + 4, 2);
-        // Skiver (vekter på hver side)
-        ctx.fillStyle = '#202020';
-        ctx.fillRect(bx - 2.5, by + 1, 2.5, 6);
-        ctx.fillRect(bx + w, by + 1, 2.5, 6);
-        ctx.fillStyle = '#c02020';
-        ctx.fillRect(bx - 2.2, by + 2, 1.8, 4);
-        ctx.fillRect(bx + w + 0.4, by + 2, 1.8, 4);
+        ctx.fillStyle = '#2c2c2c';
+        ctx.fillRect(bx, by, 2.5, h);
+        ctx.fillRect(bx + w - 2.5, by, 2.5, h);
+        // Stang (tydeligere, svart med refleks)
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(bx - 3, by + 3, w + 6, 2.5);
+        ctx.fillStyle = 'rgba(220,220,230,0.35)';
+        ctx.fillRect(bx - 3, by + 3, w + 6, 0.6);
+        // Skiver — to store pr side
+        const plate = (cx, cy) => {
+          ctx.fillStyle = '#141414';
+          ctx.fillRect(cx - 1.2, cy - 4, 2.4, 8);
+          ctx.fillStyle = '#a82020';
+          ctx.fillRect(cx - 0.9, cy - 3.2, 1.8, 6.4);
+        };
+        plate(bx - 4.5, by + 4);
+        plate(bx - 2,   by + 4);
+        plate(bx + w + 2, by + 4);
+        plate(bx + w + 4.5, by + 4);
         // Nedre hvile-stang
-        ctx.fillStyle = '#484848';
+        ctx.fillStyle = '#404040';
         ctx.fillRect(bx - 1, by + h - 3, w + 2, 2);
         break;
       }
@@ -4414,6 +4554,13 @@ function renderDecor() {
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(bx + 2, by + h - 2, 2, 3);
         ctx.fillRect(bx + w - 4, by + h - 2, 2, 3);
+        // Parkert stang over benken (bench press-hint)
+        const barY = by - 2;
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(bx - 2, barY, w + 4, 1.6);
+        ctx.fillStyle = '#141414';
+        ctx.fillRect(bx - 3, barY - 1.5, 2, 4.5);
+        ctx.fillRect(bx + w + 1, barY - 1.5, 2, 4.5);
         break;
       }
       case 'mirror': {
@@ -4433,6 +4580,72 @@ function renderDecor() {
         ctx.fillStyle = 'rgba(255,255,255,0.22)';
         ctx.fillRect(bx + w * 0.28, by + 1, w * 0.08, h - 2);
         ctx.fillRect(bx + w * 0.70, by + 1, w * 0.05, h - 2);
+        break;
+      }
+      case 'dumbbellRack': {
+        const w = T * 0.85, h = T * 0.50;
+        const bx = d.x + (T - w) / 2, by = d.y + (T - h) / 2;
+        // Stativ (to horisontale hyller)
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(bx, by, w, 1.5);
+        ctx.fillRect(bx, by + h*0.55, w, 1.5);
+        // Stativ-bein
+        ctx.fillRect(bx, by, 1.5, h);
+        ctx.fillRect(bx + w - 1.5, by, 1.5, h);
+        // Hankler (par på hver hylle)
+        const dumbbell = (cx, cy) => {
+          ctx.fillStyle = '#141414';
+          ctx.fillRect(cx - 2.5, cy - 1.2, 1.6, 2.4);
+          ctx.fillRect(cx + 0.9, cy - 1.2, 1.6, 2.4);
+          ctx.fillStyle = '#3a3a3a';
+          ctx.fillRect(cx - 0.9, cy - 0.6, 1.8, 1.2);
+        };
+        dumbbell(bx + w*0.28, by - 1);
+        dumbbell(bx + w*0.72, by - 1);
+        dumbbell(bx + w*0.28, by + h*0.55 - 1);
+        dumbbell(bx + w*0.72, by + h*0.55 - 1);
+        break;
+      }
+      case 'showerBench': {
+        const w = T * 0.85, h = T * 0.20;
+        const bx = d.x + (T - w) / 2, by = d.y + (T - h) / 2;
+        // Skygge
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fillRect(bx + 1, by + h, w - 2, 1.5);
+        // Benk-topp (lys plast/plank)
+        ctx.fillStyle = '#6e7a86';
+        ctx.fillRect(bx, by, w, h);
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.fillRect(bx, by, w, 1);
+        // Bein
+        ctx.fillStyle = '#2e3642';
+        ctx.fillRect(bx + 2, by + h, 1.5, 2.5);
+        ctx.fillRect(bx + w - 3.5, by + h, 1.5, 2.5);
+        break;
+      }
+      case 'showerDrain': {
+        // Dropshadow
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.arc(d.x, d.y + 0.8, 7, 0, Math.PI*2); ctx.fill();
+        // Metallisk ytterring
+        const rg = ctx.createRadialGradient(d.x - 1.5, d.y - 1.5, 0, d.x, d.y, 6.5);
+        rg.addColorStop(0,   '#5a6a78');
+        rg.addColorStop(0.5, '#3a4a58');
+        rg.addColorStop(1,   '#1a2028');
+        ctx.fillStyle = rg;
+        ctx.beginPath(); ctx.arc(d.x, d.y, 6.5, 0, Math.PI*2); ctx.fill();
+        // Mørk kjerne
+        ctx.fillStyle = '#080c10';
+        ctx.beginPath(); ctx.arc(d.x, d.y, 4.5, 0, Math.PI*2); ctx.fill();
+        // Pluss-rutenett
+        ctx.strokeStyle = 'rgba(140,165,190,0.55)'; ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(d.x - 4, d.y); ctx.lineTo(d.x + 4, d.y);
+        ctx.moveTo(d.x, d.y - 4); ctx.lineTo(d.x, d.y + 4);
+        ctx.stroke();
+        // Våt glint
+        ctx.fillStyle = 'rgba(180,210,240,0.30)';
+        ctx.beginPath(); ctx.arc(d.x - 2, d.y - 2, 1, 0, Math.PI*2); ctx.fill();
         break;
       }
       case 'tray': {
@@ -4639,6 +4852,168 @@ function renderDecor() {
       }
     }
   }
+
+  // ── DUSJ: romfølelse og levende vann ────────────────────────────
+  const sx0 = 24 * TILE, sy0 = 17 * TILE;
+  const sw  = 11 * TILE, sh  =  5 * TILE;
+  const wallH = 11;
+
+  // BAKVEGG — faktisk flat flate på topp av rad 17
+  ctx.fillStyle = '#1a1f26';
+  ctx.fillRect(sx0, sy0, sw, wallH);
+  // Subtil variasjon (murpuss-følelse)
+  ctx.fillStyle = 'rgba(255,255,255,0.025)';
+  ctx.fillRect(sx0, sy0, sw, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.20)';
+  ctx.fillRect(sx0, sy0 + wallH - 2, sw, 1);
+  // Hard kant der vegg møter gulv
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(sx0, sy0 + wallH);
+  ctx.lineTo(sx0 + sw, sy0 + wallH);
+  ctx.stroke();
+  // Myk fall-off under kant (AO)
+  const fallOff = ctx.createLinearGradient(sx0, sy0 + wallH, sx0, sy0 + wallH + 4);
+  fallOff.addColorStop(0, 'rgba(0,0,0,0.30)');
+  fallOff.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = fallOff;
+  ctx.fillRect(sx0, sy0 + wallH, sw, 4);
+
+  // VÅTE STRIPER — lys topp → mørk bunn, puddel ved sluk
+  for (const sx of [26, 29, 32]) {
+    const cx = sx * TILE + TILE/2;
+    const wetTop = 18 * TILE + TILE * 0.65;
+    const wetBot = 21 * TILE;
+    const wetW   = TILE * 1.15;
+    const wg = ctx.createLinearGradient(cx, wetTop, cx, wetBot);
+    wg.addColorStop(0,   'rgba(5,12,22,0.10)');
+    wg.addColorStop(0.5, 'rgba(6,14,24,0.22)');
+    wg.addColorStop(1,   'rgba(4,10,18,0.40)');
+    ctx.fillStyle = wg;
+    ctx.fillRect(cx - wetW/2, wetTop, wetW, wetBot - wetTop);
+    // Puddel-halo rundt sluket
+    const drainY = 20.5 * TILE;
+    const puddleG = ctx.createRadialGradient(cx, drainY, 2, cx, drainY, 12);
+    puddleG.addColorStop(0, 'rgba(2,8,14,0.35)');
+    puddleG.addColorStop(1, 'rgba(2,8,14,0)');
+    ctx.fillStyle = puddleG;
+    ctx.fillRect(cx - 14, drainY - 14, 28, 28);
+    // Tynn blank refleks
+    ctx.fillStyle = 'rgba(180,215,240,0.06)';
+    ctx.fillRect(cx - 1.5, wetTop + 4, 3, (wetBot - wetTop) * 0.55);
+  }
+
+  // Side- og bunn-skygger (beholdes fra v0.9.28)
+  const leftShadow = ctx.createLinearGradient(sx0, sy0, sx0 + 6, sy0);
+  leftShadow.addColorStop(0, 'rgba(0,0,0,0.25)');
+  leftShadow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = leftShadow; ctx.fillRect(sx0, sy0, 6, sh);
+  const rightShadow = ctx.createLinearGradient(sx0 + sw, sy0, sx0 + sw - 6, sy0);
+  rightShadow.addColorStop(0, 'rgba(0,0,0,0.25)');
+  rightShadow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = rightShadow; ctx.fillRect(sx0 + sw - 6, sy0, 6, sh);
+  const botShadow = ctx.createLinearGradient(sx0, sy0 + sh, sx0, sy0 + sh - 5);
+  botShadow.addColorStop(0, 'rgba(0,0,0,0.20)');
+  botShadow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = botShadow; ctx.fillRect(sx0, sy0 + sh - 5, sw, 5);
+
+  // SKILLEVEGGER mellom dusjhodene (visuelt, ingen kollisjon)
+  for (const dcol of [27.5, 30.5]) {
+    const dx = dcol * TILE;
+    const divTop = sy0 + wallH + 2;
+    const divBot = 20 * TILE + TILE * 0.2;
+    const divW = 3;
+    ctx.fillStyle = 'rgba(0,0,0,0.30)';
+    ctx.fillRect(dx + 1, divTop, divW, divBot - divTop);
+    ctx.fillStyle = '#2a3038';
+    ctx.fillRect(dx - divW/2, divTop, divW, divBot - divTop);
+    ctx.fillStyle = 'rgba(180,195,210,0.22)';
+    ctx.fillRect(dx - divW/2, divTop, 0.8, divBot - divTop);
+    ctx.fillStyle = '#1a2028';
+    ctx.fillRect(dx - divW/2 - 0.5, divTop - 1, divW + 1, 1.5);
+  }
+
+  // RENNENDE VANN — aktiv per dusjhode hvis en innsatt står i tilen
+  const showerHeadTiles = [
+    {sx: 26, sy: 18},
+    {sx: 29, sy: 18},
+    {sx: 32, sy: 18}
+  ];
+  const nowW = performance.now();
+  for (const {sx, sy} of showerHeadTiles) {
+    let active = false;
+    for (const inm of GS.inmates) {
+      if (inm.zone !== 'shower') continue;
+      if (Math.floor(inm.px / TILE) === sx && Math.floor(inm.py / TILE) === sy) {
+        active = true; break;
+      }
+    }
+    if (!active) continue;
+    const pipeX = sx * TILE + TILE/2;
+    const nozzleY = sy * TILE + TILE * 0.55 + 2;
+    const streamBot = 21 * TILE - 2;
+    // Tynne vertikale stråle-linjer med jitter
+    for (let i = 0; i < 3; i++) {
+      const ox = (i - 1) * 1.4;
+      const jitter = Math.sin(nowW * 0.008 + i * 1.7) * 0.4;
+      ctx.strokeStyle = `rgba(170,210,240,${0.20 + i * 0.06})`;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(pipeX + ox + jitter, nozzleY);
+      ctx.lineTo(pipeX + ox + jitter * 0.5, streamBot);
+      ctx.stroke();
+    }
+    // Animerte dråper (modulo-tid faller nedover)
+    for (let i = 0; i < 5; i++) {
+      const phase = ((nowW * 0.12 + i * 35) % 100) / 100;
+      const y = nozzleY + phase * (streamBot - nozzleY);
+      const x = pipeX + (i - 2) * 1.2 + Math.sin(nowW * 0.01 + i) * 0.3;
+      const alpha = 0.50 * (1 - Math.abs(phase - 0.5) * 0.7);
+      ctx.fillStyle = `rgba(190,220,245,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 0.9, 0, Math.PI*2); ctx.fill();
+    }
+    // Splash-ellipse ved bunn (lett pulserende)
+    ctx.fillStyle = 'rgba(170,210,240,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(pipeX, streamBot, 4 + Math.sin(nowW * 0.012) * 0.5, 1.2, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Steam-halo rundt nozzle
+    const steamG = ctx.createRadialGradient(pipeX, nozzleY - 2, 0, pipeX, nozzleY - 2, 6);
+    steamG.addColorStop(0, 'rgba(200,225,245,0.12)');
+    steamG.addColorStop(1, 'rgba(200,225,245,0)');
+    ctx.fillStyle = steamG;
+    ctx.fillRect(pipeX - 7, nozzleY - 9, 14, 14);
+  }
+
+  // Gym: beholdes svak mørk-varm tint
+  ctx.fillStyle = 'rgba(40,20,20,0.06)';
+  ctx.fillRect(10*TILE, 17*TILE, 11*TILE, 5*TILE);
+
+  // Rotte-animasjon (kun én aktiv om gangen, krysser dusjen)
+  if (GS.activeRat) {
+    const r = GS.activeRat;
+    const t = (Date.now() - r.startedAt) / r.durationMs;
+    if (t >= 1) {
+      GS.activeRat = null;
+    } else {
+      const x = r.sx + (r.ex - r.sx) * t;
+      const y = r.sy + (r.ey - r.sy) * t;
+      const dir = Math.sign(r.ex - r.sx) || 1;
+      // Kropp
+      ctx.fillStyle = '#2a1a14';
+      ctx.beginPath(); ctx.ellipse(x, y, 3.5, 1.8, 0, 0, Math.PI*2); ctx.fill();
+      // Hale
+      ctx.strokeStyle = '#2a1a14'; ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x - dir*3, y);
+      ctx.lineTo(x - dir*6, y + 1);
+      ctx.stroke();
+      // Øye-prikk
+      ctx.fillStyle = 'rgba(255,200,180,0.55)';
+      ctx.fillRect(x + dir*2.3, y - 0.6, 0.7, 0.7);
+    }
+  }
 }
 
 function renderStaff() {
@@ -4746,6 +5121,28 @@ function renderTint() {
     }
     ctx.restore();
   }
+}
+
+function renderWinnerBanner() {
+  const inm = GS.inmates.find(i => i.id === GS.winnerId);
+  if (!inm) return;
+  const cx = W / 2, cy = H / 2;
+  const falt = GS.stats.disappeared;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.60)';
+  ctx.fillRect(cx - 200, cy - 46, 400, 92);
+  ctx.strokeStyle = '#ffd86b';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - 200, cy - 46, 400, 92);
+  ctx.fillStyle = '#ffd86b';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('👑 LAST MAN STANDING', cx, cy - 18);
+  ctx.fillStyle = '#fff';
+  ctx.font = '15px sans-serif';
+  ctx.fillText(`${inm.name} vant — ${falt} falt`, cx, cy + 12);
+  ctx.restore();
 }
 
 function render() {
@@ -5004,7 +5401,16 @@ function renderInmateList() {
 function updateUI() {
   const phase = PHASES[GS.phaseIndex];
   document.getElementById('phase-display').textContent = phase;
-  document.getElementById('day-display').textContent   = `Dag ${GS.day}`;
+  {
+    const dayEl = document.getElementById('day-display');
+    if (GS.mode === 'lastManStanding') {
+      const n = GS.inmates.length;
+      const col = n >= 9 ? '#aab' : n >= 4 ? '#d9c86c' : '#d87070';
+      dayEl.innerHTML = `Dag ${GS.day} &nbsp;·&nbsp; <span style="color:${col}">👥 ${n} igjen</span>`;
+    } else {
+      dayEl.textContent = `Dag ${GS.day}`;
+    }
+  }
   document.querySelectorAll('.pb').forEach(b => b.classList.toggle('on', b.dataset.p === phase));
 
   const u = Math.round(GS.totalUnrest);
@@ -5022,13 +5428,19 @@ function updateUI() {
   document.getElementById('s-disappeared').textContent = GS.stats.disappeared;
 
   // Powers — cooldown labels + disabled state
-  document.querySelectorAll('.pwr').forEach(btn => {
-    const key = btn.dataset.pwr;
-    const cd  = GS.powerCooldowns[key] || 0;
-    btn.disabled = cd > 0;
-    const cdEl = btn.querySelector('.pwr-cd');
-    if (cdEl) cdEl.textContent = cd > 0 ? `${cd}d igjen` : 'klar';
-  });
+  const powersPanel = document.getElementById('powers');
+  if (GS.mode === 'lastManStanding') {
+    powersPanel.style.display = 'none';
+  } else {
+    powersPanel.style.display = '';
+    document.querySelectorAll('.pwr').forEach(btn => {
+      const key = btn.dataset.pwr;
+      const cd  = GS.powerCooldowns[key] || 0;
+      btn.disabled = cd > 0;
+      const cdEl = btn.querySelector('.pwr-cd');
+      if (cdEl) cdEl.textContent = cd > 0 ? `${cd}d igjen` : 'klar';
+    });
+  }
 
   // Topp-dog detection — logg ved endring
   {
@@ -5212,8 +5624,14 @@ document.querySelectorAll('.pb').forEach(btn => {
     GS.phaseTick  = 0;
     const newZone = PHASE_ZONE[PHASES[idx]];
     for (let i = 0; i < GS.inmates.length; i++) {
-      const delay = i * 350 + Math.random() * 200;
-      GS.inmates[i].setTargetZone(newZone, delay);
+      const inm = GS.inmates[i];
+      const pBias = inm.kvirk === 'impulsiv'             ? -800
+                  : inm.temperament === 'aggressive'     ? -400
+                  : inm.temperament === 'calm'           ? +600
+                  : inm.kvirk === 'nervøs'               ? +1100
+                  : 0;
+      const delay = Math.max(0, Math.random() * 5500 + pBias);
+      inm.setTargetZone(newZone, delay);
     }
   });
 });
@@ -5324,20 +5742,37 @@ document.addEventListener('keydown', e => {
 // MAIN LOOP
 // ================================================================
 let lastTs = 0;
+// v0.9.32: movement-dt får hard clamp + EMA-smoothing slik at tick-hitches
+// ikke spiker step-størrelsen. Tick/UI-timere bruker fortsatt rå-clampet dt.
+let smoothMoveDt = 16;
 
 function loop(ts) {
-  const dt = Math.min(ts - lastTs, 50);
+  const rawDt = ts - lastTs;
   lastTs = ts;
 
-  for (const inm of GS.inmates) inm.move(dt);
-  for (const g   of GS.guards)   g.move(dt);
+  // Last Man Standing: frys sim når vinner er kåret, men fortsett å tegne.
+  if (GS.winnerId != null) {
+    render();
+    renderWinnerBanner();
+    requestAnimationFrame(loop);
+    return;
+  }
 
-  tickTimer += dt;
+  // Movement: clamp hardt (20ms) + gliding EMA → jevn step-størrelse
+  const moveDt = Math.min(rawDt, 20);
+  smoothMoveDt = smoothMoveDt * 0.80 + moveDt * 0.20;
+
+  for (const inm of GS.inmates) inm.move(smoothMoveDt);
+  for (const g   of GS.guards)   g.move(smoothMoveDt);
+
+  // Tick/UI bruker rå dt (clampet som før)
+  const tickDt = Math.min(rawDt, 50);
+  tickTimer += tickDt;
   if (tickTimer >= TICK_MS) { tickTimer = 0; tick(); }
 
   render();
 
-  uiTimer += dt;
+  uiTimer += tickDt;
   if (uiTimer >= 180) { uiTimer = 0; updateUI(); }
 
   requestAnimationFrame(loop);
@@ -5387,6 +5822,8 @@ function saveGame() {
     powerLog: GS.powerLog,
     topDogId: GS.topDogId,
     departed: GS.departed,
+    mode:     GS.mode,
+    winnerId: GS.winnerId,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
@@ -5407,6 +5844,8 @@ function loadGame() {
   GS.powerLog  = Array.isArray(data.powerLog) ? data.powerLog : [];
   GS.topDogId  = data.topDogId ?? null;
   GS.departed  = Array.isArray(data.departed) ? data.departed : [];
+  GS.mode      = (data.mode === 'lastManStanding') ? 'lastManStanding' : 'normal';
+  GS.winnerId  = (typeof data.winnerId === 'number') ? data.winnerId : null;
   GS.inmates = []; GS.guards = [];
   UID = 1;
   for (const d of data.inmates) {
@@ -5430,6 +5869,7 @@ function loadGame() {
     if (typeof inm.fightPushY !== 'number') inm.fightPushY = 0;
     if (typeof inm._facing !== 'number') inm._facing = Math.PI / 2;
     if (typeof inm._isMoving !== 'boolean') inm._isMoving = false;
+    if (typeof inm._walkPhase !== 'number') inm._walkPhase = 0;
     if (typeof inm.guardNoticedFight !== 'boolean') inm.guardNoticedFight = true;
     if (typeof inm.targetId !== 'number') inm.targetId = null;
     if (typeof inm.lastFightOpponent !== 'string') inm.lastFightOpponent = null;
@@ -5464,6 +5904,7 @@ function loadGame() {
     inm.waypoints = [];
     inm.currentSpotId = null;
     inm.phaseDelay = 0; inm.pendingZone = null;
+    if (typeof inm._chatMs !== 'number') inm._chatMs = 0;
     GS.inmates.push(inm);
   }
   UID = Math.max(...GS.inmates.map(i => i.id)) + 1;
@@ -5505,7 +5946,16 @@ function startGame(fromSave = false) {
   requestAnimationFrame(loop);
 }
 
-document.getElementById('btn-new').addEventListener('click', () => startGame(false));
+document.getElementById('btn-new').addEventListener('click', () => {
+  GS.mode     = 'normal';
+  GS.winnerId = null;
+  startGame(false);
+});
+document.getElementById('btn-lastman').addEventListener('click', () => {
+  GS.mode     = 'lastManStanding';
+  GS.winnerId = null;
+  startGame(false);
+});
 document.getElementById('btn-continue').addEventListener('click', () => {
   if (GS.inmates.length > 0) {
     document.getElementById('menu').style.display = 'none';
