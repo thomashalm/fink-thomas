@@ -176,9 +176,10 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.9.34 &bull; 2025</p>
+  <p>Panoptikon v0.10.1 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
+  <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
   <button class="mb" id="btn-continue" disabled>Continue</button>
   <button class="mb" id="btn-load" disabled>Load</button>
 </div>
@@ -186,7 +187,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.9.34</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.10.1</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -875,10 +876,16 @@ const GS = {
   powerLog:        [],
   topDogId:        null,
   departed:        [],   // tidligere innsatte {id, name, day, reason}
+  corpses:         [],   // shower-modus: lik som blir liggende
+  bloodSpots:      [],   // shower-modus: akkumulerte blodflekker
   activeRat:       null, // runtime rotte-animasjon i dusj — {sx,sy,ex,ey,startedAt,durationMs}
-  mode:            'normal',   // 'normal' | 'lastManStanding'
+  mode:            'normal',   // 'normal' | 'lastManStanding' | 'lastManStandingShower'
   winnerId:        null,       // satt når lastManStanding er avgjort
 };
+function isArenaMode() {
+  return GS.mode === 'lastManStanding'
+      || GS.mode === 'lastManStandingShower';
+}
 function defaultStats() {
   return { isolation:0, counseling:0, library:0, workshop:0, fights:0, friendships:0, disappeared:0 };
 }
@@ -1588,6 +1595,12 @@ function pickAmbition(temperament, kvirk) {
 const CLOTH_COLORS = ['#c85020','#3858a0','#a02020','#607838','#703898','#a0943a'];
 const SKIN_TONES   = ['#f0c888','#d4906a','#b06838','#7c4020'];
 const HAIR_COLORS  = ['#181008','#4c3018','#787878','#b09838'];
+const BODY_TYPES = {
+  tynn:   { buildMult: 0.78, tallMult: 1.06, hrMult: 1.00 },
+  normal: { buildMult: 1.00, tallMult: 1.00, hrMult: 1.00 },
+  bred:   { buildMult: 1.28, tallMult: 0.95, hrMult: 1.00 },
+  tank:   { buildMult: 1.35, tallMult: 0.92, hrMult: 0.84 },
+};
 const KATEGORIER   = ['vold','økonomi','narkotika','tyveri','annet'];
 
 // Kvirk — én valgfri personlighetsflavor per innsatt (ca. 40% har en)
@@ -1609,7 +1622,9 @@ class Inmate {
     this.name          = pickUniqueName();
     this.cellId        = cellId;
     this.cellSlot      = 0;
-    this.groupId       = Math.random() < 0.65 ? ['A','B','C'][this.id % 3] : null;
+    this.groupId       = (isArenaMode())
+                         ? null
+                         : (Math.random() < 0.65 ? ['A','B','C'][this.id % 3] : null);
     this.zone          = 'cell';
     this.targetZone    = 'cell';
     this.waypoints     = [];
@@ -1634,8 +1649,16 @@ class Inmate {
     this.memories            = [];     // {type, day, otherId, otherName, weight} — maks MEMORY_MAX
 
     // Core stats
-    this.unrest   = (GS.mode === 'lastManStanding' ? 25 : 10) + Math.random()*20;
-    this.health   = 80 + Math.random()*20;
+    this.unrest   = (GS.mode === 'lastManStandingShower')
+                    ? 40 + Math.random() * 20
+                    : isArenaMode()
+                      ? 25 + Math.random() * 20
+                      : 10 + Math.random() * 20;
+    this.health   = (GS.mode === 'lastManStandingShower')
+                    ? 30 + Math.random() * 15   // 30–45 — party mode
+                    : isArenaMode()
+                      ? 50 + Math.random() * 15 // 50–65
+                      : 80 + Math.random() * 20;
     this.energi   = 40 + Math.random()*60;   // 0–100, drains when active, recharges at night
     this.hygiene  = 40 + Math.random()*60;   // 0–100, drains over time, recharges in shower
     this.disiplin = 20 + Math.random()*80;   // 0–100, erodes when unrest is high
@@ -1660,7 +1683,9 @@ class Inmate {
     this.aktivitet        = 'ingen';                     // settes ved fase-skifte
 
     // Personlig mål — settes etter traits så pickAmbition kan bruke dem
-    this.ambition = pickAmbition(this.temperament, this.kvirk);
+    this.ambition = (isArenaMode())
+                    ? null
+                    : pickAmbition(this.temperament, this.kvirk);
 
     // Conflict state
     this.inConflict       = false;
@@ -1733,20 +1758,32 @@ class Inmate {
     const pick = arr => arr[Math.floor(Math.random()*arr.length)];
     const hs = Math.random();
     const bs = Math.random();
+    const bt = Math.random();
+    const bodyType = bt < 0.20 ? 'tynn'
+                   : bt < 0.70 ? 'normal'
+                   : bt < 0.90 ? 'bred'
+                   :             'tank';
+    const bPreset = BODY_TYPES[bodyType];
     this.look = {
       clothColor:   pick(CLOTH_COLORS),
       pantsColor:   pick(['#3a2e22','#2a3548','#454030','#1e1e24','#50382a','#2a2418']),
       jacketColor:  Math.random() < 0.30 ? pick(['#2a2e38','#3a2618','#1e2e22','#402828','#283a3a','#3e3822']) : null,
       skinTone:     pick(SKIN_TONES),
-      // 0=skallete 1=kort 2=hette 3=hood-up 4=langt
-      hairStyle:    hs < 0.15 ? 0 : hs < 0.45 ? 1 : hs < 0.65 ? 2 : hs < 0.80 ? 3 : 4,
+      // 0=skallete 1=buzzcut 2=hette 3=hood-up 4=langt 5=afro 6=flat top
+      hairStyle:    hs < 0.12 ? 0
+                  : hs < 0.32 ? 1
+                  : hs < 0.47 ? 2
+                  : hs < 0.60 ? 3
+                  : hs < 0.72 ? 4
+                  : hs < 0.88 ? 5
+                  :             6,
       hairColor:    pick(HAIR_COLORS),
-      // none / stubble / full — erstatter boolean
       beardStyle:   bs < 0.50 ? 'none' : bs < 0.80 ? 'stubble' : 'full',
       sizeFactor:   0.85 + Math.random()*0.30,
-      // Bell-fordelt build/height: de fleste nær midten, sjeldne ytterpunkter
-      build:        0.78 + 0.56 * (Math.random() + Math.random()) / 2, // ~0.78..1.34
-      heightFactor: 0.88 + 0.27 * (Math.random() + Math.random()) / 2, // ~0.88..1.15
+      bodyType,
+      // build/height: diskret preset × smal random-varians oppå
+      build:        (0.92 + Math.random()*0.16) * bPreset.buildMult,
+      heightFactor: (0.94 + Math.random()*0.12) * bPreset.tallMult,
       shoeColor:    pick(['#141414', '#2a2018', '#3a3a40', '#1c1410']),
     };
   }
@@ -1893,7 +1930,10 @@ class Inmate {
       this.waypoints.shift();
       if (this.waypoints.length === 0) this.zone = this.targetZone;
     } else {
-      const spd = this.speed * dt * 0.054;
+      const speedMult = (GS.mode === 'lastManStandingShower') ? 2.5
+                      : isArenaMode()                         ? 1.8
+                      :                                         1;
+      const spd = this.speed * dt * 0.054 * speedMult;
       this.px += dx/d * spd;
       this.py += dy/d * spd;
       this._facing  = Math.atan2(dy, dx);
@@ -1925,9 +1965,10 @@ class Guard {
 
   move(dt) {
     this._isMoving = false;
+    const lastMan = isArenaMode();
     // Periodically scan for high-unrest target
     this.scanTimer -= dt;
-    if (this.scanTimer <= 0 && !this.target) {
+    if (this.scanTimer <= 0 && !this.target && !lastMan) {
       // Adaptiv scan-rate: dobler tempo ved høy uro i fengselet
       const anyHigh = GS.inmates.some(i => i.unrest > 70);
       this.scanTimer = anyHigh ? 1000 : 2000;
@@ -1960,7 +2001,7 @@ class Guard {
       }
     }
 
-    if (this.target) {
+    if (this.target && !lastMan) {
       // Drop target if inmate has calmed down
       if (this.target.unrest < 40) {
         this.target.isBeingIntervened = false;
@@ -2084,7 +2125,7 @@ function pickTakeOverTarget() {
 }
 
 function spawnNewcomer() {
-  if (GS.mode === 'lastManStanding') return null;
+  if (isArenaMode()) return null;
   // Tell opp per celle
   const cellCounts = {};
   const cellFloorOccupied = {};
@@ -2263,10 +2304,28 @@ function removeInmate(i, reasonOverride = null) {
     if (other.notifiedFriendInRoom === removedId) other.notifiedFriendInRoom = null;
   }
 
+  if (GS.mode === 'lastManStandingShower') {
+    GS.corpses.push({
+      id:    inm.id,
+      name:  inm.name,
+      px:    inm.px,
+      py:    inm.py,
+      angle: Math.random() * Math.PI * 2,
+      scale: 0.9 + Math.random() * 0.2,
+    });
+    for (let k = 0; k < 3; k++) {
+      GS.bloodSpots.push({
+        px: inm.px + (Math.random() - 0.5) * 20,
+        py: inm.py + (Math.random() - 0.5) * 14,
+        r:  8 + Math.random() * 6,
+      });
+    }
+  }
+
   GS.stats.disappeared++;
   GS.inmates.splice(i, 1);
 
-  if (GS.mode === 'lastManStanding') {
+  if (isArenaMode()) {
     addPowerEvent('ambition',
       `🩸 ${inm.name} er ute av spillet (${GS.inmates.length} igjen).`);
     if (GS.winnerId == null && GS.inmates.length === 1) {
@@ -2338,6 +2397,7 @@ function chooseRoomAfterFight(inm) {
 }
 
 function sendToRoomAfterFight(inm) {
+  if (GS.mode === 'lastManStandingShower') return;   // party mode — ingen pause
   if (inm.isolationTicks > 0) return;      // allerede på opphold
   const room = chooseRoomAfterFight(inm);
   inm.postFightRoom      = room;
@@ -2413,7 +2473,10 @@ const FIGHT_MS_MAX = 5000;
 
 function triggerConflict(a, b) {
   // Start kamp — skade/utfall bestemmes i resolveFight når timeren er ute
-  const dur = FIGHT_MS_MIN + Math.random() * (FIGHT_MS_MAX - FIGHT_MS_MIN);
+  const shower = (GS.mode === 'lastManStandingShower');
+  const fMin = shower ? 700  : isArenaMode() ? 1800 : FIGHT_MS_MIN;
+  const fMax = shower ? 1200 : isArenaMode() ? 2500 : FIGHT_MS_MAX;
+  const dur = fMin + Math.random() * (fMax - fMin);
   a.inFight = b.inFight = true;
   a.fightMs = b.fightMs = dur;
   a.fightOpponent = b.id;
@@ -2426,8 +2489,9 @@ function triggerConflict(a, b) {
   a.conflictFlashMs = b.conflictFlashMs = FLASH_DURATION;
   const rivalry = a.respekt > DOMINANT_THRESHOLD && b.respekt > DOMINANT_THRESHOLD;
   const cdMult  = rivalry ? RIVALRY_COOLDOWN_MULT : 1.0;
-  a.conflictCooldown = (a.kvirk === 'impulsiv' ? CONFLICT_COOLDOWN/2 : CONFLICT_COOLDOWN) * cdMult;
-  b.conflictCooldown = (b.kvirk === 'impulsiv' ? CONFLICT_COOLDOWN/2 : CONFLICT_COOLDOWN) * cdMult;
+  const baseCD = shower ? 1500 : isArenaMode() ? 4000 : CONFLICT_COOLDOWN;
+  a.conflictCooldown = (a.kvirk === 'impulsiv' ? baseCD/2 : baseCD) * cdMult;
+  b.conflictCooldown = (b.kvirk === 'impulsiv' ? baseCD/2 : baseCD) * cdMult;
   a.conflictCount++;
   b.conflictCount++;
   // Isolat-sjekk er flyttet til resolveFight — applies etter at kampen er over
@@ -2441,8 +2505,12 @@ function resolveFight(a, b) {
   const winner = scoreA >= scoreB ? a : b;
   const loser  = winner === a ? b : a;
 
-  // Taper: helseskade + uro opp
-  const dmg = 8 + Math.random() * 7;   // 8–15
+  // Taper: helseskade + uro opp (dobbel skade i lastMan — 14–28)
+  const dmg = (GS.mode === 'lastManStandingShower')
+    ? 35 + Math.random() * 25   // 35–60 — party mode
+    : isArenaMode()
+      ? 22 + Math.random() * 20 // 22–42
+      : 8  + Math.random() * 7; // 8–15
   loser.health = Math.max(HEALTH_FLOOR, loser.health - dmg);
   loser.unrest = Math.min(100, loser.unrest + 15);
 
@@ -2453,7 +2521,9 @@ function resolveFight(a, b) {
   winner.lastFightDay      = GS.day;
 
   // Vinner: litt lavere uro, ingen skade
-  winner.unrest = Math.max(0, winner.unrest - 5);
+  if (GS.mode !== 'lastManStandingShower') {
+    winner.unrest = Math.max(0, winner.unrest - 5);
+  }
 
   // Rivalitet — to dominante som slåss gir større respekt-utslag + egen historikk
   const rivalry = winner.respekt > DOMINANT_THRESHOLD && loser.respekt > DOMINANT_THRESHOLD;
@@ -2512,6 +2582,17 @@ function resolveFight(a, b) {
 
   // Blodpøl under taperen — litt lengre enn downedMs så den vedvarer etter stand-up
   loser.bloodPoolMs = 3500;
+
+  // Shower-modus: akkumuler blodflekker som blir værende på gulvet
+  if (GS.mode === 'lastManStandingShower') {
+    for (let k = 0; k < 2; k++) {
+      GS.bloodSpots.push({
+        px: loser.px + (Math.random() - 0.5) * 22,
+        py: loser.py + (Math.random() - 0.5) * 16,
+        r:  6 + Math.random() * 5,
+      });
+    }
+  }
 
   // Push-offset: taperen skyves ~8 px bort fra vinneren (visuelt, fades i tick)
   const dxP = loser.px - winner.px, dyP = loser.py - winner.py;
@@ -2649,6 +2730,7 @@ function triggerGangWar(gA, gB) {
 
 function runConflictCheck() {
   const n = GS.inmates.length;
+  const shower = (GS.mode === 'lastManStandingShower');
   for (let i = 0; i < n; i++) {
     const a = GS.inmates[i];
     if (a.isolationTicks > 0) continue;
@@ -2658,7 +2740,7 @@ function runConflictCheck() {
       const aIdol = GS.inmates.find(x => x.id === a.idolId);
       if (aIdol && aIdol.inConflict) aThresh -= 15;
     }
-    if (a.unrest < aThresh) continue;
+    if (!shower && a.unrest < aThresh) continue;
     if (a.isBeingIntervened) continue;
     if (a.zone === 'cell') continue;
 
@@ -2673,7 +2755,7 @@ function runConflictCheck() {
 
       const dx = a.px - b.px, dy = a.py - b.py;
       const d  = Math.sqrt(dx*dx + dy*dy);
-      if (d > CONFLICT_DIST) continue;
+      if (!shower && d > CONFLICT_DIST) continue;
 
       // Ambisjons-par: nykommer møter sitt mål → hopp over weak-skip, tving chance=1.0
       const ambitionPair =
@@ -2691,7 +2773,7 @@ function runConflictCheck() {
         (bIsLeader && !aIsLeader && a.respekt > 60) ||
         (aIsLeader && !bIsLeader && b.respekt > 60);
 
-      if (!ambitionPair && !grudgePair) {
+      if (!ambitionPair && !grudgePair && !shower) {
         // Dominant mot svak: skip halvparten av gangene — gir rivaler tid til å finne hverandre
         if (a.respekt > DOMINANT_THRESHOLD && b.respekt < 50 && Math.random() < WEAK_SKIP_CHANCE) continue;
         if (b.respekt > DOMINANT_THRESHOLD && a.respekt < 50 && Math.random() < WEAK_SKIP_CHANCE) continue;
@@ -2817,7 +2899,9 @@ function chooseActivity(inm, phase) {
 function tick() {
   // Advance phase
   GS.phaseTick += GS.speed;
-  if (GS.phaseTick >= PHASE_TICKS[PHASES[GS.phaseIndex]]) {
+  const phaseLen = PHASE_TICKS[PHASES[GS.phaseIndex]]
+                 * (isArenaMode() ? 0.5 : 1);
+  if (GS.phaseTick >= phaseLen) {
     GS.phaseTick = 0;
     GS.phaseIndex = (GS.phaseIndex + 1) % PHASES.length;
     if (GS.phaseIndex === 0) {
@@ -2841,7 +2925,7 @@ function tick() {
           }
           addDeparted(leaving, 'Slapp ut etter endt soning');
           GS.inmates.splice(i, 1);
-          if (GS.mode !== 'lastManStanding') {
+          if (!isArenaMode()) {
             const fresh = new Inmate(cellId);
             fresh.setTargetZone(PHASE_ZONE[PHASES[GS.phaseIndex]]);
             GS.inmates.push(fresh);
@@ -2852,19 +2936,28 @@ function tick() {
     // Aktivitet først — den styrer bibliotek-overstyringen i sone-valget under
     const newPhase = PHASES[GS.phaseIndex];
     for (const inm of GS.inmates) {
-      inm.aktivitet = chooseActivity(inm, newPhase);
+      if (GS.mode === 'lastManStandingShower') {
+        inm.aktivitet = 'ingen';   // shower: aldri dusj, aldri aktivitet-bytte
+      } else {
+        inm.aktivitet = chooseActivity(inm, newPhase);
+      }
       // Oppdater kjedelig-flagg ved fase-bytte (verksted-deprivasjon)
       inm.isBored = (GS.day - (inm.lastWorkshopDay ?? GS.day)) > 5;
     }
-    const defaultZone = PHASE_ZONE[newPhase];
+    const defaultZone =
+        GS.mode === 'lastManStandingShower' ? 'shower'
+      : GS.mode === 'lastManStanding'       ? 'gang'
+      : PHASE_ZONE[newPhase];
     for (let i = 0; i < GS.inmates.length; i++) {
       if (GS.inmates[i].isolationTicks > 0) continue;
       let targetZone = defaultZone;
-      if (GS.inmates[i].aktivitet === 'lesing' && libraryHasSpot()) {
-        targetZone = 'library';
-      }
-      if (GS.inmates[i].aktivitet === 'arbeid' && workshopHasSpot()) {
-        targetZone = 'workshop';
+      if (!isArenaMode()) {
+        if (GS.inmates[i].aktivitet === 'lesing' && libraryHasSpot()) {
+          targetZone = 'library';
+        }
+        if (GS.inmates[i].aktivitet === 'arbeid' && workshopHasSpot()) {
+          targetZone = 'workshop';
+        }
       }
       // Variert fasestagger med personlighet (v0.9.32): 0–5.5s spredning,
       // ±1s forskyvning basert på kvirk/temperament — impulsive først, nervøse sist.
@@ -2874,11 +2967,13 @@ function tick() {
                   : inm.temperament === 'calm'           ? +600
                   : inm.kvirk === 'nervøs'               ? +1100
                   : 0;
-      const delay = Math.max(0, Math.random() * 5500 + pBias);
+      const delay = (GS.mode === 'lastManStandingShower') ? 0
+                  : isArenaMode()                         ? Math.random() * 800
+                  :                                         Math.max(0, Math.random() * 5500 + pBias);
       inm.setTargetZone(targetZone, delay);
     }
     // Ritual / Samling: i Ettermiddag, hvis en karismatisk er fri, samles hun og fanatiske i samme sone
-    if (newPhase === 'Ettermiddag') {
+    if (newPhase === 'Ettermiddag' && !isArenaMode()) {
       const kari = GS.inmates.find(i => i.kvirk === 'karismatisk' && i.isolationTicks === 0);
       if (kari) {
         const samlingZone = kari.targetZone;
@@ -3004,14 +3099,16 @@ function tick() {
           }
         }
       }
-      // Aktivitets-effekt
-      switch (inm.aktivitet) {
-        case 'trening':  delta -= 0.30; inm.energi = Math.max(0, inm.energi - 0.5); break;
-        case 'sosial':   delta -= 0.15; break;
-        case 'lesing':   delta -= 0.40; break;
-        case 'arbeid':   delta -= 0.35; inm.energi = Math.max(0, inm.energi - 0.15); break;
-        case 'dusj':     delta += 0.10; break;
-        case 'samling':  delta -= 0.20; break;
+      // Aktivitets-effekt (skrudd av i lastMan — ingen ro-ned)
+      if (!isArenaMode()) {
+        switch (inm.aktivitet) {
+          case 'trening':  delta -= 0.30; inm.energi = Math.max(0, inm.energi - 0.5); break;
+          case 'sosial':   delta -= 0.15; break;
+          case 'lesing':   delta -= 0.40; break;
+          case 'arbeid':   delta -= 0.35; inm.energi = Math.max(0, inm.energi - 0.15); break;
+          case 'dusj':     delta += 0.10; break;
+          case 'samling':  delta -= 0.20; break;
+        }
       }
       // Kjedelig-drift: innsatte som ikke har vært i verksted på 5+ dager
       if (inm.isBored) delta += 0.005;
@@ -3125,12 +3222,29 @@ function tick() {
     }
   }
 
-  // Konflikt-sjekk hver 10. tick (~9s)
-  if (++conflictCounter >= 10) { conflictCounter = 0; runConflictCheck(); }
+  // Shower: passiv unrest-floor så ingen driver ned mellom kamper
+  if (GS.mode === 'lastManStandingShower') {
+    for (const inm of GS.inmates) {
+      if (inm.unrest < 70) inm.unrest = Math.min(100, inm.unrest + 1.5);
+    }
+  }
+
+  // Konflikt-sjekk hver 10. tick (~9s) — hver 3. tick (~2,7s) i lastMan
+  const cLimit = (GS.mode === 'lastManStandingShower') ? 1
+               : isArenaMode()                         ? 3
+               :                                         10;
+  if (++conflictCounter >= cLimit) { conflictCounter = 0; runConflictCheck(); }
+
+  // Last Man Standing: eskalerende uro når få gjenstår — forhindrer stagnert sluttspill
+  if (isArenaMode() && GS.inmates.length <= 8) {
+    const bump = (9 - GS.inmates.length) * 0.3;
+    for (const inm of GS.inmates) inm.unrest = Math.min(100, inm.unrest + bump);
+  }
 
   // Venn-dannelse hver 10. tick (deler teller med konflikt-sjekken ville gjort det uregelmessig;
   // bruker egen teller for klarhet)
-  if (++friendCounter >= 10) { friendCounter = 0; runFriendFormation(); }
+  const fLimit = (isArenaMode()) ? Infinity : 10;
+  if (++friendCounter >= fLimit) { friendCounter = 0; runFriendFormation(); }
 
   // Tell frivillige biblioteksbesøk (kant-detektor ved ankomst, ignorer post-fight-opphold)
   for (const inm of GS.inmates) {
@@ -3267,7 +3381,7 @@ const GANG_COLOR = { A: '#c83030', B: '#2858c8', C: '#28a040' };
 
 function drawShadow(x, y, w) {
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
   ctx.beginPath();
   ctx.ellipse(x, y + TILE * 0.22, w, w * 0.35, 0, 0, Math.PI*2);
   ctx.fill();
@@ -3314,18 +3428,19 @@ function renderInmateDetailed(inm, px, py, base, facing) {
   const look    = inm.look;
   const build   = (typeof look.build === 'number') ? look.build : 1.0;
   const tall    = (typeof look.heightFactor === 'number') ? look.heightFactor : 1.0;
+  const bPreset = BODY_TYPES[look.bodyType] || BODY_TYPES.normal;
   const br      = base * 0.56 * build;
-  const hr      = base * 0.40 * (0.94 + 0.06 * build);
+  const hr      = base * 0.48 * (0.94 + 0.06 * build) * bPreset.hrMult;
 
   // Pust + walk/idle animasjoner
   const now     = Date.now();
   const breath  = 1 + 0.020 * Math.sin(now * 0.002 + inm.id * 0.7);
   const moving  = !!inm._isMoving && !inm.inFight && inm.downedMs === 0;
   const phase   = (inm._walkPhase || 0) * 0.18;   // distansebasert stride-fase
-  const bob     = moving ? Math.sin(phase) * 0.45 : 0;
+  const bob     = moving ? Math.sin(phase) * 2.0 : 0;
   const lean    = moving
-    ? Math.sin((facing - Math.PI/2)) * 0.035
-    : Math.sin(now * 0.0009 + inm.id) * 0.006;
+    ? Math.sin((facing - Math.PI/2)) * 0.095 + 0.08
+    : Math.sin(now * 0.0009 + inm.id) * 0.012;
 
   // Pivot ved fotpunkt, så lean + breath roterer naturlig
   const pivotY = py + base * 0.85;
@@ -3408,6 +3523,11 @@ function renderInmateDetailed(inm, px, py, base, facing) {
   ctx.restore();
 
   // ========== TORSO ==========
+  // Dark pre-pass outline for silhouette contrast
+  ctx.save();
+  ctx.fillStyle = 'rgba(8,6,10,0.88)';
+  ctx.beginPath(); ctx.arc(bx, by, br + 1.2, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
   // Radial gradient: lysere øvre → mørkere nedre
   const torsoGrad = ctx.createRadialGradient(
     bx - br * 0.25, by - br * 0.5, 0,
@@ -3428,6 +3548,20 @@ function renderInmateDetailed(inm, px, py, base, facing) {
   // Torso kontur
   ctx.strokeStyle = 'rgba(0,0,0,0.60)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
+
+  // ========== FENGSELS-STRIPER (arena-modus) ==========
+  if (isArenaMode()) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(bx, by, br - 0.5, 0, Math.PI*2); ctx.clip();
+    ctx.fillStyle = 'rgba(255,250,245,0.72)';
+    const stripeH = Math.max(1, br * 0.18);
+    const stripeW = br * 2.2;
+    for (let s = -1; s <= 1; s++) {
+      const sy = by + s * br * 0.45 - stripeH * 0.5;
+      ctx.fillRect(bx - stripeW * 0.5, sy, stripeW, stripeH);
+    }
+    ctx.restore();
+  }
 
   // ========== JAKKE / VEST (~30 %) ==========
   // Andre-lags klær oppå skjorta — gir to-tone silhuett
@@ -3495,6 +3629,11 @@ function renderInmateDetailed(inm, px, py, base, facing) {
   ctx.restore();
 
   // ========== HODE ==========
+  // Dark pre-pass outline
+  ctx.save();
+  ctx.fillStyle = 'rgba(8,6,10,0.88)';
+  ctx.beginPath(); ctx.arc(hx, hy, hr + 1.0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
   const headGrad = ctx.createRadialGradient(
     hx - hr * 0.30, hy - hr * 0.50, 0,
     hx,             hy,              hr * 1.15
@@ -3538,12 +3677,44 @@ function renderInmateDetailed(inm, px, py, base, facing) {
   }
 
   // ========== HÅR ==========
-  // 0=skallet 1=kort 2=hette 3=hood-up 4=langt
-  if (look.hairStyle > 0) {
+  // 0=skallet 1=buzzcut 2=hette 3=hood-up 4=langt 5=afro 6=flat top
+  if (look.hairStyle === 5) {
+    // AFRO — stor rund hårmasse, sterk silhuett
+    ctx.save();
+    const afroR = hr * 1.55;
+    const afroGrad = ctx.createRadialGradient(hx - hr*0.30, hy - hr*0.60, 0, hx, hy - hr*0.30, afroR);
+    afroGrad.addColorStop(0, _lighten(look.hairColor, 0.22));
+    afroGrad.addColorStop(1, _darken(look.hairColor, 0.22));
+    ctx.fillStyle = afroGrad;
+    ctx.beginPath();
+    ctx.arc(hx, hy - hr * 0.15, afroR, Math.PI * 1.02, Math.PI * -0.02, false);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.60)'; ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,245,220,0.32)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(hx, hy - hr * 0.15, afroR - 0.6, Math.PI * 1.15, Math.PI * 1.45);
+    ctx.stroke();
+    ctx.restore();
+  } else if (look.hairStyle === 6) {
+    // FLAT TOP — rektangulær silhuett
+    ctx.save();
+    const ftW = hr * 1.85, ftH = hr * 0.72;
+    const ftX = hx - ftW / 2;
+    const ftY = hy - hr - ftH * 0.35;
+    ctx.fillStyle = look.hairColor;
+    ctx.fillRect(ftX, ftY, ftW, ftH);
+    ctx.fillStyle = _darken(look.hairColor, 0.30);
+    ctx.fillRect(ftX, ftY + ftH * 0.60, ftW, ftH * 0.25);
+    ctx.strokeStyle = 'rgba(0,0,0,0.70)'; ctx.lineWidth = 1;
+    ctx.strokeRect(ftX, ftY, ftW, ftH);
+    ctx.restore();
+  } else if (look.hairStyle > 0) {
     const capR = look.hairStyle === 2 ? hr * 1.20
                : look.hairStyle === 3 ? hr * 1.40
                : look.hairStyle === 4 ? hr * 1.06
-               : hr * 1.02;
+               : hr * 0.98;
     const hairGrad = ctx.createRadialGradient(
       hx - hr * 0.25, hy - hr * 0.55, 0,
       hx,             hy - hr * 0.2,   capR
@@ -3634,27 +3805,57 @@ function renderInmateDetailed(inm, px, py, base, facing) {
     const blinkPhase  = (now + inm.id * 311) % blinkPeriod;
     const blinking    = blinkPhase < 120;
 
-    ctx.fillStyle = 'rgba(20,14,10,0.90)';
+    // Øyne skalerer med hr — radius + blink-lengde
+    const eyeR    = hr * 0.28;
+    const eyeLine = hr * 0.32;
+    ctx.fillStyle = 'rgba(20,14,10,0.92)';
     if (blinking) {
-      // Lukkede øyne — korte horisontale streker
-      ctx.strokeStyle = 'rgba(20,14,10,0.90)'; ctx.lineWidth = 0.9;
-      ctx.beginPath(); ctx.moveTo(eye1x - 0.9, eye1y); ctx.lineTo(eye1x + 0.9, eye1y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(eye2x - 0.9, eye2y); ctx.lineTo(eye2x + 0.9, eye2y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(20,14,10,0.92)'; ctx.lineWidth = Math.max(0.9, hr * 0.14);
+      ctx.beginPath(); ctx.moveTo(eye1x - eyeLine, eye1y); ctx.lineTo(eye1x + eyeLine, eye1y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(eye2x - eyeLine, eye2y); ctx.lineTo(eye2x + eyeLine, eye2y); ctx.stroke();
     } else {
-      ctx.beginPath(); ctx.arc(eye1x, eye1y, 0.9, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(eye2x, eye2y, 0.9, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(eye1x, eye1y, eyeR, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(eye2x, eye2y, eyeR, 0, Math.PI*2); ctx.fill();
+      // Pupil-highlight — liten hvit prikk øverst-høyre i øyet
+      ctx.fillStyle = 'rgba(255,250,240,0.85)';
+      ctx.beginPath(); ctx.arc(eye1x + eyeR * 0.35, eye1y - eyeR * 0.35, eyeR * 0.40, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(eye2x + eyeR * 0.35, eye2y - eyeR * 0.35, eyeR * 0.40, 0, Math.PI*2); ctx.fill();
     }
 
-    // Munn — form avhenger av unrest
-    const mouthDy = hr * 0.68;
-    const mx = hx + (0 * cosF - mouthDy * sinF);
-    const my = hy + (0 * sinF + mouthDy * cosF);
-    const mouthDrop = inm.unrest > 70 ? 1.0 : inm.unrest > 40 ? 0.5 : 0;
-    ctx.strokeStyle = 'rgba(0,0,0,0.65)'; ctx.lineWidth = 0.9;
+    // Bryn — vinkel styres av unrest/temperament (aggressiv = innover-og-ned)
+    if (!blinking) {
+      const browOff  = hr * 0.38;
+      const browLen  = hr * 0.38;
+      const browTilt = inm.unrest > 70 ? 0.55
+                     : inm.unrest > 40 ? 0.25
+                     : inm.temperament === 'aggressive' ? 0.40
+                     : inm.temperament === 'calm'       ? -0.10
+                     : 0.05;
+      ctx.strokeStyle = _darken(look.hairColor || '#2a1a14', 0.25);
+      ctx.lineWidth   = Math.max(0.9, hr * 0.16);
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      ctx.moveTo(eye1x - browLen * 0.5 * cosF, eye1y - browOff - browLen * 0.5 * sinF);
+      ctx.lineTo(eye1x + browLen * 0.5 * cosF, eye1y - browOff + browTilt + browLen * 0.5 * sinF);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(eye2x - browLen * 0.5 * cosF, eye2y - browOff + browTilt - browLen * 0.5 * sinF);
+      ctx.lineTo(eye2x + browLen * 0.5 * cosF, eye2y - browOff + browLen * 0.5 * sinF);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+
+    // Munn — skalerer med hr, form avhenger av unrest
+    const mouthDy   = hr * 0.68;
+    const mx        = hx + (0 * cosF - mouthDy * sinF);
+    const my        = hy + (0 * sinF + mouthDy * cosF);
+    const mouthDrop = inm.unrest > 70 ? hr * 0.28 : inm.unrest > 40 ? hr * 0.14 : 0;
+    const mouthHalf = hr * 0.42;
+    ctx.strokeStyle = 'rgba(0,0,0,0.70)';
+    ctx.lineWidth   = Math.max(0.9, hr * 0.15);
     ctx.beginPath();
-    // Kurvet munn: hjørner faller med mouthDrop
-    ctx.moveTo(mx - 1.3 * cosF,             my - 1.3 * sinF + mouthDrop);
-    ctx.quadraticCurveTo(mx, my + mouthDrop * 0.4, mx + 1.3 * cosF, my + 1.3 * sinF + mouthDrop);
+    ctx.moveTo(mx - mouthHalf * cosF,             my - mouthHalf * sinF + mouthDrop);
+    ctx.quadraticCurveTo(mx, my + mouthDrop * 0.4, mx + mouthHalf * cosF, my + mouthHalf * sinF + mouthDrop);
     ctx.stroke();
 
     ctx.restore();
@@ -3841,6 +4042,52 @@ const STATIC_DECOR = [
   { type: 'bulletin', x: 40*TILE, y: 23.2*TILE },
 ];
 
+function renderShowerDebris() {
+  // Akkumulert blod — mørkere, mer transparent
+  if (GS.bloodSpots && GS.bloodSpots.length) {
+    ctx.save();
+    ctx.fillStyle = '#4a0a0a';
+    ctx.globalAlpha = 0.45;
+    for (const s of GS.bloodSpots) {
+      ctx.beginPath();
+      ctx.ellipse(s.px, s.py, s.r, s.r * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  // Lik — mørke solide silhuetter, offset fra blod så de ikke smelter sammen
+  if (GS.corpses && GS.corpses.length) {
+    for (const c of GS.corpses) {
+      const ox = Math.cos(c.angle) * 5;
+      const oy = Math.sin(c.angle) * 5;
+      const s  = c.scale || 1;
+      ctx.save();
+      ctx.translate(c.px + ox, c.py + oy);
+      ctx.rotate(c.angle);
+      ctx.scale(s, s);
+      // Base (kropp) — mørk nøytral ellipse
+      ctx.globalAlpha = 0.88;
+      ctx.fillStyle = '#1e1e24';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 9, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Overkropp/hode — litt lysere og mindre, forskjøvet mot "hodet"
+      ctx.fillStyle = '#2e2e36';
+      ctx.beginPath();
+      ctx.ellipse(-4, 0, 4.5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Svak outline for lesbarhet
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = '#0a0a0d';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 9, 4, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
 function renderInmates() {
   for (const inm of GS.inmates) {
     // Gjeng-highlight: dim innsatte som ikke matcher aktivt filter.
@@ -3853,9 +4100,9 @@ function renderInmates() {
     if (dimmed) { ctx.save(); ctx.globalAlpha = 0.18; }
 
     const { look } = inm;
-    const base = TILE * 0.345 * look.sizeFactor;
+    const base = TILE * 0.58 * look.sizeFactor;
     const br   = base * 0.56;   // body radius
-    const hr   = base * 0.40;   // head radius
+    const hr   = base * 0.48;   // head radius
     // Push-offset etter tap (fades i tick)
     const px = inm.px + inm.fightPushX;
     const py = inm.py + inm.fightPushY;
@@ -3889,7 +4136,7 @@ function renderInmates() {
       ctx.restore();
     }
 
-    drawShadow(px, py, base * 0.55);
+    drawShadow(px, py, base * 0.55 + 2);
 
     // Liggende figur: roter 90° rundt senter, bevar klær/hud/hår. Hopper over
     // dangerous-aura, status-emojis, fight-ring og søvn/mat-indikatorer.
@@ -3993,7 +4240,7 @@ function renderInmates() {
     renderInmateDetailed(inm, px + lungeX, py + lungeY, base, deriveFacing(inm));
 
     // Shower effect — animated water droplets above head
-    if (inm.zone === 'shower') {
+    if (inm.zone === 'shower' && GS.mode !== 'lastManStandingShower') {
       ctx.save();
       ctx.fillStyle = '#80c8f8';
       ctx.globalAlpha = 0.55 + Math.sin(Date.now()*0.003 + inm.id) * 0.20;
@@ -4109,9 +4356,9 @@ function renderGuards() {
       ctx.restore();
     }
 
-    const base   = TILE * 0.42;
+    const base   = TILE * 0.70;
     const br     = base * 0.46;    // smalere kropp (var 0.58)
-    const hr     = base * 0.36;    // smalere hode (var 0.40)
+    const hr     = base * 0.44;    // smalere hode (var 0.40)
     const px     = g.px, py = g.py;
     const facing = g.facing || 0;
 
@@ -4218,13 +4465,21 @@ function renderGuards() {
     ctx.strokeStyle = '#050a18'; ctx.lineWidth = 1.0;
     ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.stroke();
 
+    // ========== KNAPPER (vertikal rad opp torso) ==========
+    ctx.fillStyle = '#e8c850';
+    const btnR = Math.max(0.9, br * 0.14);
+    for (let k = 0; k < 3; k++) {
+      const btnY = by - br * 0.50 + k * br * 0.35;
+      ctx.beginPath(); ctx.arc(bx, btnY, btnR, 0, Math.PI*2); ctx.fill();
+    }
+
     // ========== BELTE + SKILT ==========
     ctx.fillStyle = '#c8a840';
-    ctx.fillRect(bx - br * 0.92, by - 1.3, br * 1.84, 2.2);
+    ctx.fillRect(bx - br * 0.92, by + br * 0.55 - 1.3, br * 1.84, Math.max(2.2, br * 0.24));
     ctx.fillStyle = '#e8c850';
-    ctx.beginPath(); ctx.arc(bx, by - br * 0.20, 2.0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx + br * 0.35, by + br * 0.55, Math.max(1.6, br * 0.18), 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.beginPath(); ctx.arc(bx - 0.5, by - br * 0.20 - 0.5, 0.7, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx + br * 0.35 - 0.5, by + br * 0.55 - 0.5, Math.max(0.6, br * 0.07), 0, Math.PI*2); ctx.fill();
 
     // ========== FREMRE ARM ==========
     const frontArmX = bx + faceX * br * 1.05;
@@ -5152,6 +5407,7 @@ function render() {
   renderZoneOutlines();
   renderLabels();
   renderDecor();
+  if (GS.mode === 'lastManStandingShower') renderShowerDebris();
   renderInmates();
   renderGuards();
   renderStaff();
@@ -5403,7 +5659,7 @@ function updateUI() {
   document.getElementById('phase-display').textContent = phase;
   {
     const dayEl = document.getElementById('day-display');
-    if (GS.mode === 'lastManStanding') {
+    if (isArenaMode()) {
       const n = GS.inmates.length;
       const col = n >= 9 ? '#aab' : n >= 4 ? '#d9c86c' : '#d87070';
       dayEl.innerHTML = `Dag ${GS.day} &nbsp;·&nbsp; <span style="color:${col}">👥 ${n} igjen</span>`;
@@ -5429,7 +5685,7 @@ function updateUI() {
 
   // Powers — cooldown labels + disabled state
   const powersPanel = document.getElementById('powers');
-  if (GS.mode === 'lastManStanding') {
+  if (isArenaMode()) {
     powersPanel.style.display = 'none';
   } else {
     powersPanel.style.display = '';
@@ -5936,11 +6192,20 @@ function startGame(fromSave = false) {
     GS.powerLog = [];
     GS.topDogId = null;
     GS.departed = [];
+    GS.corpses     = [];
+    GS.bloodSpots  = [];
     GS.powerCooldowns = { newcomer: 0, gangwar: 0 };
     GS.inmates = []; GS.guards = [];
     spawn();
-    const initZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
-    for (const inm of GS.inmates) inm.setTargetZone(initZone);
+    if (GS.mode === 'lastManStandingShower') {
+      for (const inm of GS.inmates) {
+        inm.aktivitet = 'ingen';
+        inm.setTargetZone('shower', 0);
+      }
+    } else {
+      const initZone = PHASE_ZONE[PHASES[GS.phaseIndex]];
+      for (const inm of GS.inmates) inm.setTargetZone(initZone);
+    }
   }
   document.getElementById('menu').style.display = 'none';
   requestAnimationFrame(loop);
@@ -5953,6 +6218,11 @@ document.getElementById('btn-new').addEventListener('click', () => {
 });
 document.getElementById('btn-lastman').addEventListener('click', () => {
   GS.mode     = 'lastManStanding';
+  GS.winnerId = null;
+  startGame(false);
+});
+document.getElementById('btn-lastman-shower').addEventListener('click', () => {
+  GS.mode     = 'lastManStandingShower';
   GS.winnerId = null;
   startGame(false);
 });
