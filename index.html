@@ -176,7 +176,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.12.0 &bull; 2025</p>
+  <p>Panoptikon v0.13.0 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -187,7 +187,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.12.0</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.13.0</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -859,6 +859,7 @@ const GS = {
   map:     null,
   totalUnrest: 0,
   selectedId: null,
+  selectedGuardId: null,   // gjensidig ekskluderende med selectedId
   hoverId:    null,
   listFilter: 'all',    // 'all' | 'iso' | 'con' | 'hot'
   playerId:   null,     // spiller-karakter — settes av fremtidig spiller-feature
@@ -2019,6 +2020,8 @@ class Guard {
           if (this.target.inFight) this.target.fightMs = Math.min(this.target.fightMs, 200);
           this.interventionTimer += dt;
           this.facing = Math.atan2(dy, dx);
+          this._engagedUntil = Date.now() + 500;
+          this._lastEngagedStatus = 'Griper inn';
           if (this.interventionTimer >= 4000) {
             this.target.isBeingIntervened = false;
             this.target = null; this.interventionTimer = 0;
@@ -2031,6 +2034,8 @@ class Guard {
           this._isMoving = true;
           this.facing = Math.atan2(dy, dx);
           this._walkPhase += spd;
+          this._engagedUntil = Date.now() + 500;
+          this._lastEngagedStatus = 'På vei mot mål';
         }
       }
       return;
@@ -2104,7 +2109,16 @@ function spawn() {
   // Guard 4: vertical spine + gym/shower observer (panoptikon guard)
   GS.guards.push(new Guard([{x:21,y:12},{x:21,y:5},{x:21,y:12},{x:21,y:19},{x:21,y:12}]));
 
+  assignGuardIds();
   assignIdols();
+}
+
+// Stabil id derivert fra spawn-rekkefølge ('g1'..'gN').
+// Kalles fra spawn() og loadGame() — ingen serialisering nødvendig.
+function assignGuardIds() {
+  for (let i = 0; i < GS.guards.length; i++) {
+    GS.guards[i].id = 'g' + (i + 1);
+  }
 }
 
 // Berømt nykommer — power-spawn med overstyrt profil + dominans-basert seng-kamp
@@ -4448,6 +4462,14 @@ function renderGuards() {
       ctx.restore();
     }
 
+    // Selection-ring (cyan — distinkt fra innsatt-gult)
+    if (g.id === GS.selectedGuardId) {
+      ctx.strokeStyle = '#5cc8e0';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(g.px, g.py, TILE * 0.70 + 4, 0, Math.PI*2);
+      ctx.stroke();
+    }
+
     const base   = TILE * 0.70;
     const br     = base * 0.46;    // smalere kropp (var 0.58)
     const hr     = base * 0.44;    // smalere hode (var 0.40)
@@ -5962,7 +5984,30 @@ function updateUI() {
         ${sel.history.map(h => `<div class="dr"><span class="dv" style="color:#8a9098;font-size:0.72rem">&bull; ${historyRender(h)}</span></div>`).join('')}
       ` : ''}`;
   } else {
-    dp.innerHTML = '<span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>';
+    const selGuard = GS.selectedGuardId
+      ? GS.guards.find(g => g.id === GS.selectedGuardId)
+      : null;
+    if (selGuard) {
+      const label = 'Vakt ' + selGuard.id.toUpperCase();
+      let status;
+      if (selGuard.target) {
+        const dx = selGuard.target.px - selGuard.px;
+        const dy = selGuard.target.py - selGuard.py;
+        const d  = Math.hypot(dx, dy);
+        status = (d < TILE * 1.2 && selGuard.interventionTimer > 0) ? 'Griper inn' : 'På vei mot mål';
+      } else if (selGuard._engagedUntil > Date.now() && selGuard._lastEngagedStatus) {
+        status = selGuard._lastEngagedStatus;
+      } else if (Date.now() < selGuard.pauseUntil) {
+        status = 'Pause';
+      } else {
+        status = 'Patruljerer';
+      }
+      dp.innerHTML = `
+        <h4>${label}<span id="detail-close" style="float:right;cursor:pointer;color:#667;font-size:0.9rem;padding:0 4px" title="Lukk (Esc)">×</span></h4>
+        <div class="dr"><span class="dl">Status</span><span class="dv">${status}</span></div>`;
+    } else {
+      dp.innerHTML = '<span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>';
+    }
   }
 }
 
@@ -6012,6 +6057,7 @@ function triggerNewcomerPower() {
   if (!newcomer) return;                  // alle fulle celler har floor sleeper; cooldown resettet i spawnNewcomer
   GS.powerCooldowns.newcomer = 5;
   GS.selectedId = newcomer.id;
+  GS.selectedGuardId = null;
   addHistory(newcomer, `⚡ Ankom fengselet — ryktet til å være farlig.`);
   addPowerEvent('arrival', `⚡ ${newcomer.name} ankom — beryktet.`);
 }
@@ -6040,19 +6086,29 @@ document.getElementById('departed-toggle').addEventListener('click', () => {
   if (open) updateUI();
 });
 
-// Canvas — click to select inmate, mousemove to hover
+// Canvas — click to select inmate or guard, mousemove to hover
 canvas.addEventListener('click', e => {
   const rect = canvas.getBoundingClientRect();
   const sx = canvas.width  / rect.width;
   const sy = canvas.height / rect.height;
   const mx = (e.clientX - rect.left) * sx;
   const my = (e.clientY - rect.top)  * sy;
-  let closest = null, closestD = TILE;
+  let bestKind = null, bestObj = null, bestD = TILE;
   for (const inm of GS.inmates) {
     const d = Math.hypot(inm.px - mx, inm.py - my);
-    if (d < closestD) { closest = inm; closestD = d; }
+    if (d < bestD) { bestKind = 'inmate'; bestObj = inm; bestD = d; }
   }
-  if (closest) GS.selectedId = closest.id === GS.selectedId ? null : closest.id;
+  for (const g of GS.guards) {
+    const d = Math.hypot(g.px - mx, g.py - my);
+    if (d < bestD) { bestKind = 'guard'; bestObj = g; bestD = d; }
+  }
+  if (bestKind === 'inmate') {
+    GS.selectedId      = bestObj.id === GS.selectedId ? null : bestObj.id;
+    GS.selectedGuardId = null;
+  } else if (bestKind === 'guard') {
+    GS.selectedGuardId = bestObj.id === GS.selectedGuardId ? null : bestObj.id;
+    GS.selectedId      = null;
+  }
 });
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
@@ -6065,8 +6121,13 @@ canvas.addEventListener('mousemove', e => {
     const d = Math.hypot(inm.px - mx, inm.py - my);
     if (d < closestD) { closest = inm; closestD = d; }
   }
+  let guardHover = false;
+  for (const g of GS.guards) {
+    const d = Math.hypot(g.px - mx, g.py - my);
+    if (d < closestD) { closest = null; guardHover = true; closestD = d; }
+  }
   GS.hoverId = closest ? closest.id : null;
-  canvas.style.cursor = closest ? 'pointer' : 'default';
+  canvas.style.cursor = (closest || guardHover) ? 'pointer' : 'default';
 });
 canvas.addEventListener('mouseleave', () => { GS.hoverId = null; canvas.style.cursor = 'default'; });
 
@@ -6094,20 +6155,30 @@ document.getElementById('ilist').addEventListener('click', e => {
   if (!card) return;
   const id = Number(card.dataset.id);
   GS.selectedId = (GS.selectedId === id) ? null : id;
+  GS.selectedGuardId = null;
   updateUI();
 });
 
 // Lukk-knapp i detaljpanel
 document.getElementById('detail').addEventListener('click', e => {
-  if (e.target.id === 'detail-close') { GS.selectedId = null; updateUI(); }
+  if (e.target.id === 'detail-close') {
+    GS.selectedId = null;
+    GS.selectedGuardId = null;
+    updateUI();
+  }
 });
 
-// ESC → deselect, Space → toggle pause
+// ESC → deselect (innsatt + vakt), Space → toggle pause
 document.addEventListener('keydown', e => {
   // Ignorer hotkeys hvis fokus er i et input-felt
   const tag = e.target && e.target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-  if (e.key === 'Escape') { GS.selectedId = null; updateUI(); return; }
+  if (e.key === 'Escape') {
+    GS.selectedId = null;
+    GS.selectedGuardId = null;
+    updateUI();
+    return;
+  }
   if (e.code === 'Space') {
     e.preventDefault();
     GS.paused = !GS.paused;
@@ -6289,6 +6360,7 @@ function loadGame() {
   }
   UID = Math.max(...GS.inmates.map(i => i.id)) + 1;
   for (const d of data.guards) GS.guards.push(new Guard(d.patrol, d.pi));
+  assignGuardIds();
   const zone = PHASE_ZONE[PHASES[GS.phaseIndex]];
   for (const inm of GS.inmates) inm.setTargetZone(zone);
   return true;
