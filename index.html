@@ -176,7 +176,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.10.1 &bull; 2025</p>
+  <p>Panoptikon v0.12.0 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -187,7 +187,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.10.1</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.12.0</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -881,6 +881,7 @@ const GS = {
   activeRat:       null, // runtime rotte-animasjon i dusj — {sx,sy,ex,ey,startedAt,durationMs}
   mode:            'normal',   // 'normal' | 'lastManStanding' | 'lastManStandingShower'
   winnerId:        null,       // satt når lastManStanding er avgjort
+  paused:          false,      // mellomrom toggler — fryser tick + move, render fortsetter
 };
 function isArenaMode() {
   return GS.mode === 'lastManStanding'
@@ -2471,6 +2472,16 @@ function applyRoomEffect(inm) {
 const FIGHT_MS_MIN = 3500;
 const FIGHT_MS_MAX = 5000;
 
+// Angrepstype-vekter per bodyType: [skalle, slag, spark] (summerer til 1)
+function pickAttackType(look) {
+  const bt = look && look.bodyType;
+  const r = Math.random();
+  if (bt === 'tank') return r < 0.60 ? 'skalle' : r < 0.90 ? 'slag' : 'spark';
+  if (bt === 'bred') return r < 0.40 ? 'skalle' : r < 0.90 ? 'slag' : 'spark';
+  if (bt === 'tynn') return r < 0.10 ? 'skalle' : r < 0.50 ? 'slag' : 'spark';
+  return               r < 0.20 ? 'skalle' : r < 0.80 ? 'slag' : 'spark'; // normal
+}
+
 function triggerConflict(a, b) {
   // Start kamp — skade/utfall bestemmes i resolveFight når timeren er ute
   const shower = (GS.mode === 'lastManStandingShower');
@@ -2479,6 +2490,9 @@ function triggerConflict(a, b) {
   const dur = fMin + Math.random() * (fMax - fMin);
   a.inFight = b.inFight = true;
   a.fightMs = b.fightMs = dur;
+  a.fightMsTotal = b.fightMsTotal = dur;
+  a.fightAttackType = pickAttackType(a.look);
+  b.fightAttackType = pickAttackType(b.look);
   a.fightOpponent = b.id;
   b.fightOpponent = a.id;
   // 60 % sjanse for at vakter legger merke til denne kampen
@@ -2507,10 +2521,10 @@ function resolveFight(a, b) {
 
   // Taper: helseskade + uro opp (dobbel skade i lastMan — 14–28)
   const dmg = (GS.mode === 'lastManStandingShower')
-    ? 35 + Math.random() * 25   // 35–60 — party mode
+    ? 18 + Math.random() * 14   // 18–32 — brutal men ikke 1-hit
     : isArenaMode()
-      ? 22 + Math.random() * 20 // 22–42
-      : 8  + Math.random() * 7; // 8–15
+      ? 16 + Math.random() * 14 // 16–30
+      : 8  + Math.random() * 7; // 8–15 (uendret)
   loser.health = Math.max(HEALTH_FLOOR, loser.health - dmg);
   loser.unrest = Math.min(100, loser.unrest + 15);
 
@@ -2594,11 +2608,17 @@ function resolveFight(a, b) {
     }
   }
 
-  // Push-offset: taperen skyves ~8 px bort fra vinneren (visuelt, fades i tick)
+  // Hit-flash: kort hvit overlay på taper rett etter treffet
+  loser.hitFlashMs = 280;
+
+  // Push-offset: skalle=14px, spark=12px, slag=10px — varierer knockback per angrepstype
+  const knockAmt = winner.fightAttackType === 'skalle' ? 14
+                 : winner.fightAttackType === 'spark'  ? 12
+                 :                                       10;
   const dxP = loser.px - winner.px, dyP = loser.py - winner.py;
   const dP  = Math.hypot(dxP, dyP) || 1;
-  loser.fightPushX = (dxP/dP) * 8;
-  loser.fightPushY = (dyP/dP) * 8;
+  loser.fightPushX = (dxP/dP) * knockAmt;
+  loser.fightPushY = (dyP/dP) * knockAmt;
 
   // Historikk — kort hendelse per innsatt
   if (rivalry) {
@@ -3180,6 +3200,8 @@ function tick() {
     if (inm._chatMs > 0) inm._chatMs = Math.max(0, inm._chatMs - TICK_MS);
     // downed-timer: ligger nede etter tapt kamp, blokkerer bevegelse
     if (inm.downedMs > 0) inm.downedMs = Math.max(0, inm.downedMs - TICK_MS);
+    // hit-flash decay — kort hvit overlay etter treff
+    if (inm.hitFlashMs > 0) inm.hitFlashMs = Math.max(0, inm.hitFlashMs - TICK_MS);
     // blodpøl-nedtelling etter tap
     if (inm.bloodPoolMs > 0) inm.bloodPoolMs = Math.max(0, inm.bloodPoolMs - TICK_MS);
     // push-offset decay (visuell slide-back etter kamp)
@@ -4106,17 +4128,30 @@ function renderInmates() {
     // Push-offset etter tap (fades i tick)
     const px = inm.px + inm.fightPushX;
     const py = inm.py + inm.fightPushY;
-    // Lunge-offset — kun fighters "jabber" mot motstander
+    // Lunge-offset — windup → hit → recover basert på fightMs-progresjon
     let lungeX = 0, lungeY = 0;
+    let fightDirX = 0, fightDirY = 0;     // retning mot motstander (for våpen-render)
+    let fightPhaseT = -1;                 // -1 = ikke i kamp
     if (inm.inFight) {
       const oppL = GS.inmates.find(x => x.id === inm.fightOpponent);
       if (oppL) {
         const ldx = oppL.px - inm.px, ldy = oppL.py - inm.py;
         const ld  = Math.hypot(ldx, ldy) || 1;
-        const phase = Math.sin(Date.now() * 0.014 + inm.id * 1.7);
-        const amp = Math.max(0, phase) * 3.5;
-        lungeX = (ldx/ld) * amp;
-        lungeY = (ldy/ld) * amp;
+        fightDirX = ldx / ld;
+        fightDirY = ldy / ld;
+        const total = inm.fightMsTotal || 3500;
+        const t = Math.max(0, Math.min(1, 1 - inm.fightMs / total));
+        fightPhaseT = t;
+        // 3-fase easing: trekk bakover → rask hit → slow recover
+        let amp;
+        if      (t < 0.35) amp = -1.5 * (t / 0.35);
+        else if (t < 0.55) amp =  6.0 * Math.sin((t - 0.35) / 0.20 * Math.PI);
+        else               amp =  2.0 * (1 - (t - 0.55) / 0.45);
+        const aType = inm.fightAttackType;
+        if      (aType === 'skalle') amp *= 1.30;
+        else if (aType === 'spark')  amp *= 0.90;
+        lungeX = fightDirX * amp;
+        lungeY = fightDirY * amp;
       }
     }
     const bx   = px + lungeX, by = py + lungeY + base * 0.18;   // body centre
@@ -4238,6 +4273,63 @@ function renderInmates() {
     }
 
     renderInmateDetailed(inm, px + lungeX, py + lungeY, base, deriveFacing(inm));
+
+    // Angrepstype-visualisering: tegnes kun i hit-fasen (0.35 < t < 0.70)
+    if (inm.inFight && fightPhaseT > 0.35 && fightPhaseT < 0.70) {
+      const hitMag = fightPhaseT < 0.55
+        ? (fightPhaseT - 0.35) / 0.20    // ramp up
+        : 1 - (fightPhaseT - 0.55) / 0.15; // ramp down
+      const mag = Math.max(0, hitMag);
+      const aType = inm.fightAttackType;
+      ctx.save();
+      if (aType === 'slag') {
+        // Utstrakt arm fra torso-senter mot motstander
+        const armReach = (br + 7) * mag;
+        const ax = bx + fightDirX * armReach;
+        const ay = by + fightDirY * armReach - base * 0.06;
+        ctx.fillStyle = look.skinTone;
+        ctx.strokeStyle = 'rgba(0,0,0,0.60)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.ellipse(ax, ay, 2.4, 1.7, Math.atan2(fightDirY, fightDirX), 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (aType === 'spark') {
+        // Utstrakt fot fra torso-bunn mot motstander
+        const kickReach = (br + 8) * mag;
+        const kx = bx + fightDirX * kickReach;
+        const ky = by + fightDirY * kickReach + base * 0.18;
+        ctx.fillStyle = look.shoeColor || '#141414';
+        ctx.strokeStyle = 'rgba(0,0,0,0.70)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.ellipse(kx, ky, 2.8, 1.4, Math.atan2(fightDirY, fightDirX), 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (aType === 'skalle') {
+        // Impact-dots ved pannen i hit-fasens peak
+        if (fightPhaseT > 0.42 && fightPhaseT < 0.58) {
+          const dotR = 1.2 + mag * 0.8;
+          ctx.fillStyle = 'rgba(255,245,200,' + (0.65 * mag).toFixed(3) + ')';
+          for (let d = 0; d < 3; d++) {
+            const ang = Math.atan2(fightDirY, fightDirX) + (d - 1) * 0.45;
+            const dx = hx + Math.cos(ang) * (hr + 2);
+            const dy = hy + Math.sin(ang) * (hr + 2);
+            ctx.beginPath(); ctx.arc(dx, dy, dotR, 0, Math.PI*2); ctx.fill();
+          }
+        }
+      }
+      ctx.restore();
+    }
+
+    // Hit-flash på taper — kort hvit overlay rett etter treff
+    if (inm.hitFlashMs > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.45 * (inm.hitFlashMs / 280);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(px, py, base * 0.95, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
 
     // Shower effect — animated water droplets above head
     if (inm.zone === 'shower' && GS.mode !== 'lastManStandingShower') {
@@ -5417,6 +5509,27 @@ function render() {
     ctx.fillStyle = `rgba(200,48,48,${a})`;
     ctx.fillRect(0, 0, W, H);
   }
+  if (GS.paused) renderPauseOverlay();
+}
+
+function renderPauseOverlay() {
+  ctx.save();
+  // Mørkt vignett-overlegg
+  ctx.fillStyle = 'rgba(0,0,0,0.40)';
+  ctx.fillRect(0, 0, W, H);
+  // Subtil puls (samme trick som dangerous-aura)
+  const pulse = 0.85 + 0.15 * Math.sin(Date.now() * 0.003);
+  // Hovedtekst
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = `rgba(255,216,107,${pulse.toFixed(3)})`;
+  ctx.font = 'bold 38px sans-serif';
+  ctx.fillText('PAUSET', W / 2, H / 2 - 10);
+  // Subtekst
+  ctx.fillStyle = 'rgba(220,220,230,0.75)';
+  ctx.font = '13px sans-serif';
+  ctx.fillText('Mellomrom for å fortsette', W / 2, H / 2 + 22);
+  ctx.restore();
 }
 
 // ================================================================
@@ -5989,9 +6102,16 @@ document.getElementById('detail').addEventListener('click', e => {
   if (e.target.id === 'detail-close') { GS.selectedId = null; updateUI(); }
 });
 
-// ESC → deselect
+// ESC → deselect, Space → toggle pause
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { GS.selectedId = null; updateUI(); }
+  // Ignorer hotkeys hvis fokus er i et input-felt
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.key === 'Escape') { GS.selectedId = null; updateUI(); return; }
+  if (e.code === 'Space') {
+    e.preventDefault();
+    GS.paused = !GS.paused;
+  }
 });
 
 // ================================================================
@@ -6018,13 +6138,17 @@ function loop(ts) {
   const moveDt = Math.min(rawDt, 20);
   smoothMoveDt = smoothMoveDt * 0.80 + moveDt * 0.20;
 
-  for (const inm of GS.inmates) inm.move(smoothMoveDt);
-  for (const g   of GS.guards)   g.move(smoothMoveDt);
-
   // Tick/UI bruker rå dt (clampet som før)
   const tickDt = Math.min(rawDt, 50);
-  tickTimer += tickDt;
-  if (tickTimer >= TICK_MS) { tickTimer = 0; tick(); }
+
+  // Pause: hopp over alt tids-basert (move + tick). Render + UI fortsetter.
+  if (!GS.paused) {
+    for (const inm of GS.inmates) inm.move(smoothMoveDt);
+    for (const g   of GS.guards)   g.move(smoothMoveDt);
+
+    tickTimer += tickDt;
+    if (tickTimer >= TICK_MS) { tickTimer = 0; tick(); }
+  }
 
   render();
 
