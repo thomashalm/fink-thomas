@@ -176,7 +176,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.15.0 &bull; 2025</p>
+  <p>Panoptikon v0.16.0 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -187,7 +187,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.15.0</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.16.0</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -854,6 +854,7 @@ const GS = {
   selectedId: null,
   selectedGuardId: null,   // gjensidig ekskluderende med selectedId
   hoverId:    null,
+  fires:     [],           // aktive branner — array av {tx, ty}
   listFilter: 'all',    // 'all' | 'iso' | 'con' | 'hot'
   playerId:   null,     // spiller-karakter — settes av fremtidig spiller-feature
   stats: {
@@ -1957,6 +1958,7 @@ class Guard {
     this._walkPhase        = 0;     // akkumulert forflytning (px) — driver stride-animasjon
     this._seed             = Math.random() * 1000; // stabil seed for breath/idle-sway
     this.playerOrder       = null;  // {px, py} — overstyrer AI; null = ingen ordre
+    this.health            = 100;   // tar skade fra brann; cappes ved 1 i v0.16 (ingen død ennå)
   }
 
   move(dt) {
@@ -3327,6 +3329,40 @@ function tick() {
     inm._wasInWorkshop = true;
   }
 
+  // Brann: skade-pass + spredning-pass
+  if (GS.fires.length > 0) {
+    // (1) Skade — alle figurer i samme tile som en brann mister 5 helse
+    for (const fire of GS.fires) {
+      for (const inm of GS.inmates) {
+        if (((inm.px / TILE) | 0) === fire.tx && ((inm.py / TILE) | 0) === fire.ty) {
+          inm.health -= 5;
+        }
+      }
+      for (const g of GS.guards) {
+        if (((g.px / TILE) | 0) === fire.tx && ((g.py / TILE) | 0) === fire.ty) {
+          g.health = Math.max(1, g.health - 5);   // cap-på-1 — ingen vakt-død i v0.16
+        }
+      }
+    }
+    // (2) Spredning — snapshot for å forhindre kjedereaksjon i samme tikk
+    const snapshot = GS.fires.slice();
+    for (const fire of snapshot) {
+      const neighbors = [
+        { tx: fire.tx,     ty: fire.ty - 1 },
+        { tx: fire.tx,     ty: fire.ty + 1 },
+        { tx: fire.tx - 1, ty: fire.ty     },
+        { tx: fire.tx + 1, ty: fire.ty     },
+      ];
+      for (const n of neighbors) {
+        if (n.tx < 0 || n.tx >= COLS || n.ty < 0 || n.ty >= ROWS) continue;
+        const tile = GS.map[n.ty]?.[n.tx];
+        if (!tile || tile.type === 'wall') continue;
+        if (GS.fires.some(f => f.tx === n.tx && f.ty === n.ty)) continue;
+        if (Math.random() < 0.05) GS.fires.push({ tx: n.tx, ty: n.ty });
+      }
+    }
+  }
+
   // Stakes: innsatte med health <= 0 fjernes og erstattes
   for (let i = GS.inmates.length - 1; i >= 0; i--) {
     if (GS.inmates[i].health <= 0) removeInmate(i);
@@ -4135,6 +4171,48 @@ function renderShowerDebris() {
       ctx.stroke();
       ctx.restore();
     }
+  }
+}
+
+function renderFires() {
+  if (!GS.fires.length) return;
+  const t = Date.now();
+  for (const fire of GS.fires) {
+    const cx = fire.tx * TILE + TILE / 2;
+    const cy = fire.ty * TILE + TILE / 2;
+    const f1 = Math.sin(t * 0.020 + fire.tx * 1.7 + fire.ty * 2.3);
+    const f2 = Math.sin(t * 0.013 + fire.tx * 3.1 + fire.ty * 0.9);
+
+    ctx.save();
+    // Mørk base — gjør tilen "kompromittert"
+    ctx.fillStyle = 'rgba(20,8,4,0.35)';
+    ctx.fillRect(fire.tx * TILE, fire.ty * TILE, TILE, TILE);
+
+    // Ytre rød flamme
+    ctx.fillStyle = `rgba(200,40,20,${(0.55 + 0.20 * f1).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(cx + f2 * 1.2, cy + 1, TILE * 0.32 + f1 * 0.8, TILE * 0.42 + f1 * 1.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mid oransje flamme
+    ctx.fillStyle = `rgba(240,120,30,${(0.70 + 0.20 * f2).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(cx + f1 * 0.8, cy + 2, TILE * 0.22, TILE * 0.32 + f2 * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Indre gul-hvit kjerne
+    ctx.fillStyle = `rgba(255,220,140,${(0.55 + 0.30 * f1).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 4, TILE * 0.10, TILE * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ambient glow — eksponderer ut over tile-grensen
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, TILE * 0.9);
+    grad.addColorStop(0, `rgba(255,160,40,${(0.18 + 0.08 * f1).toFixed(3)})`);
+    grad.addColorStop(1, 'rgba(255,160,40,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(fire.tx * TILE - TILE * 0.3, fire.ty * TILE - TILE * 0.3, TILE * 1.6, TILE * 1.6);
+    ctx.restore();
   }
 }
 
@@ -5560,6 +5638,7 @@ function render() {
   renderLabels();
   renderDecor();
   if (GS.mode === 'lastManStandingShower') renderShowerDebris();
+  renderFires();
   renderInmates();
   renderGuards();
   renderStaff();
@@ -6214,7 +6293,7 @@ document.getElementById('detail').addEventListener('click', e => {
   }
 });
 
-// ESC → deselect (innsatt + vakt), Space → toggle pause
+// ESC → deselect (innsatt + vakt), Space → toggle pause, F → tenn brann (testing)
 document.addEventListener('keydown', e => {
   // Ignorer hotkeys hvis fokus er i et input-felt
   const tag = e.target && e.target.tagName;
@@ -6228,6 +6307,21 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space') {
     e.preventDefault();
     GS.paused = !GS.paused;
+    return;
+  }
+  if (e.code === 'KeyF') {
+    // Manuell brann-trigger (testing) — kun én aktiv brann om gangen
+    if (GS.fires.length > 0) return;
+    const candidates = [];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const t = GS.map[y]?.[x];
+        if (t && t.type !== 'wall') candidates.push({ tx: x, ty: y });
+      }
+    }
+    if (candidates.length === 0) return;
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    GS.fires.push(pick);
   }
 });
 
@@ -6311,7 +6405,8 @@ function saveGame() {
       lastFightDay: inm.lastFightDay,
       memories: inm.memories,
     })),
-    guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi })),
+    guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi, health: g.health })),
+    fires:  GS.fires.slice(),
     stats: { ...GS.stats },
     playerId: GS.playerId,
     gangwarFlashMs: GS.gangwarFlashMs,
@@ -6405,8 +6500,13 @@ function loadGame() {
     GS.inmates.push(inm);
   }
   UID = Math.max(...GS.inmates.map(i => i.id)) + 1;
-  for (const d of data.guards) GS.guards.push(new Guard(d.patrol, d.pi));
+  for (const d of data.guards) {
+    const g = new Guard(d.patrol, d.pi);
+    if (typeof d.health === 'number') g.health = d.health;
+    GS.guards.push(g);
+  }
   assignGuardIds();
+  GS.fires = Array.isArray(data.fires) ? data.fires.slice() : [];
   const zone = PHASE_ZONE[PHASES[GS.phaseIndex]];
   for (const inm of GS.inmates) inm.setTargetZone(zone);
   return true;
@@ -6437,6 +6537,7 @@ function startGame(fromSave = false) {
     GS.corpses     = [];
     GS.bloodSpots  = [];
     GS.powerCooldowns = { newcomer: 0, gangwar: 0 };
+    GS.fires       = [];
     GS.inmates = []; GS.guards = [];
     spawn();
     if (GS.mode === 'lastManStandingShower') {
