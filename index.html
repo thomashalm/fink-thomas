@@ -176,7 +176,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.16.0 &bull; 2025</p>
+  <p>Panoptikon v0.16.1 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -187,7 +187,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.16.0</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.16.1</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -3340,7 +3340,7 @@ function tick() {
       }
       for (const g of GS.guards) {
         if (((g.px / TILE) | 0) === fire.tx && ((g.py / TILE) | 0) === fire.ty) {
-          g.health = Math.max(1, g.health - 5);   // cap-på-1 — ingen vakt-død i v0.16
+          g.health -= 5;
         }
       }
     }
@@ -3358,7 +3358,7 @@ function tick() {
         const tile = GS.map[n.ty]?.[n.tx];
         if (!tile || tile.type === 'wall') continue;
         if (GS.fires.some(f => f.tx === n.tx && f.ty === n.ty)) continue;
-        if (Math.random() < 0.05) GS.fires.push({ tx: n.tx, ty: n.ty });
+        if (Math.random() < 0.005 && GS.fires.length < 8) GS.fires.push({ tx: n.tx, ty: n.ty });
       }
     }
   }
@@ -3366,6 +3366,16 @@ function tick() {
   // Stakes: innsatte med health <= 0 fjernes og erstattes
   for (let i = GS.inmates.length - 1; i >= 0; i--) {
     if (GS.inmates[i].health <= 0) removeInmate(i);
+  }
+
+  // Vakter med health <= 0 dør permanent — ingen respawn
+  for (let i = GS.guards.length - 1; i >= 0; i--) {
+    const g = GS.guards[i];
+    if (g.health <= 0) {
+      if (GS.selectedGuardId === g.id) GS.selectedGuardId = null;
+      if (g.target) g.target.isBeingIntervened = false;
+      GS.guards.splice(i, 1);
+    }
   }
 
   GS.totalUnrest = GS.inmates.length
