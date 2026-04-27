@@ -176,7 +176,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.14.0 &bull; 2025</p>
+  <p>Panoptikon v0.15.0 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -187,7 +187,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.14.0</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.15.0</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -1956,11 +1956,32 @@ class Guard {
     this.facing            = 0;     // radianer, for render + glance-retning
     this._walkPhase        = 0;     // akkumulert forflytning (px) — driver stride-animasjon
     this._seed             = Math.random() * 1000; // stabil seed for breath/idle-sway
+    this.playerOrder       = null;  // {px, py} — overstyrer AI; null = ingen ordre
   }
 
   move(dt) {
     this._isMoving = false;
     const lastMan = isArenaMode();
+
+    // Spillerordre — overstyrer AI helt mens den er aktiv
+    if (this.playerOrder) {
+      const dx = this.playerOrder.px - this.px;
+      const dy = this.playerOrder.py - this.py;
+      const d  = Math.hypot(dx, dy);
+      if (d < 3) {
+        this.playerOrder = null;
+        this.scanTimer = 0;          // gi AI en sjekk neste frame
+      } else {
+        const spd = this.speed * dt * 0.054;
+        this.px += dx/d * spd;
+        this.py += dy/d * spd;
+        this._isMoving = true;
+        this.facing = Math.atan2(dy, dx);
+        this._walkPhase += spd;
+      }
+      return;
+    }
+
     // Periodically scan for high-unrest target
     this.scanTimer -= dt;
     if (this.scanTimer <= 0 && !this.target && !lastMan) {
@@ -4443,6 +4464,30 @@ function renderInmates() {
 
 function renderGuards() {
   for (const g of GS.guards) {
+    // Spillerordre — stiplet linje + markør på destinasjonen
+    if (g.playerOrder) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(92,200,224,0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(g.px, g.py);
+      ctx.lineTo(g.playerOrder.px, g.playerOrder.py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#5cc8e0';
+      ctx.beginPath();
+      ctx.arc(g.playerOrder.px, g.playerOrder.py, 6, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(g.playerOrder.px - 4, g.playerOrder.py);
+      ctx.lineTo(g.playerOrder.px + 4, g.playerOrder.py);
+      ctx.moveTo(g.playerOrder.px, g.playerOrder.py - 4);
+      ctx.lineTo(g.playerOrder.px, g.playerOrder.py + 4);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Target ring — pulsing orange circle around targeted inmate
     if (g.target) {
       const pulse = 0.35 + Math.sin(Date.now() * 0.007) * 0.25;
@@ -5983,7 +6028,9 @@ function updateUI() {
     if (selGuard) {
       const label = 'Vakt ' + selGuard.id.toUpperCase();
       let status;
-      if (selGuard.target) {
+      if (selGuard.playerOrder) {
+        status = 'Følger ordre';
+      } else if (selGuard.target) {
         const dx = selGuard.target.px - selGuard.px;
         const dy = selGuard.target.py - selGuard.py;
         const d  = Math.hypot(dx, dy);
@@ -6094,6 +6141,19 @@ canvas.addEventListener('click', e => {
   } else if (bestKind === 'guard') {
     GS.selectedGuardId = bestObj.id === GS.selectedGuardId ? null : bestObj.id;
     GS.selectedId      = null;
+  } else if (GS.selectedGuardId) {
+    // Ingen figur truffet, men en vakt er valgt → spillerordre
+    const tx = (mx / TILE) | 0;
+    const ty = (my / TILE) | 0;
+    const tile = GS.map[ty]?.[tx];
+    if (!tile || tile.type === 'wall') return;     // klikk på vegg/utenfor → ignorer stille
+    const g = GS.guards.find(g => g.id === GS.selectedGuardId);
+    if (!g) return;
+    g.playerOrder = { px: mx, py: my };
+    // Forkast eventuelt pågående AI-mål så ordren får renslig overstyring
+    if (g.target) g.target.isBeingIntervened = false;
+    g.target = null;
+    g.interventionTimer = 0;
   }
 });
 canvas.addEventListener('mousemove', e => {
