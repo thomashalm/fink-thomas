@@ -176,7 +176,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.13.0 &bull; 2025</p>
+  <p>Panoptikon v0.14.0 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -187,7 +187,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.13.0</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.14.0</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -254,12 +254,6 @@ canvas {
     <span style="color:#2a3040;font-size:0.73rem">Klikk på innsatt for detaljer.</span>
   </div>
   <div id="ctrl">
-    <div class="ctrl-row">
-      <span>Hastighet:</span>
-      <button class="sb on" data-s="1">1×</button>
-      <button class="sb" data-s="2">2×</button>
-      <button class="sb" data-s="5">5×</button>
-    </div>
     <div class="ctrl-row">
       <button class="sb" id="btn-save">Save</button>
       <button class="sb" id="btn-menu">Menu</button>
@@ -844,7 +838,7 @@ const PHASE_ZONE = {
   'Kveld':       'shower',      // dusj
   'Natt':        'cell',        // sove
 };
-const PHASE_TICKS = { 'Morgen':340, 'Formiddag':120, 'Ettermiddag':340, 'Kveld':80, 'Natt':140 };
+const PHASE_TICKS = { 'Morgen':45, 'Formiddag':15, 'Ettermiddag':45, 'Kveld':10, 'Natt':20 };
 
 // ================================================================
 // GAME STATE  (serialisable struktur for fremtidig save/load)
@@ -853,7 +847,6 @@ const GS = {
   day:   1,
   phaseIndex: 0,
   phaseTick:  0,
-  speed: 1,
   inmates: [],
   guards:  [],
   map:     null,
@@ -2381,9 +2374,9 @@ const RIVALRY_LOSS_RESPEKT  = 4;      // rival-tap (vanlig kamp har 0 tap)
 // Rom-opphold: konsekvens av gjentatte konflikter. Innsatt "velger" ett av tre rom.
 const ISOLATION_THRESHOLD = 3;                                     // konflikter før rom-ruting
 const ROOM_DURATION = {
-  isolation:  1020,   // full døgnsyklus — straff
-  counseling:  340,   // ~1 fase
-  library:     680,   // ~2 faser, roligere
+  isolation:  135,    // full døgnsyklus — straff
+  counseling:  45,    // ~1 fase
+  library:     90,    // ~2 faser, roligere
 };
 
 // Weighted random basert på personlighet + uro
@@ -2932,7 +2925,7 @@ function chooseActivity(inm, phase) {
 
 function tick() {
   // Advance phase
-  GS.phaseTick += GS.speed;
+  GS.phaseTick += 1;
   const phaseLen = PHASE_TICKS[PHASES[GS.phaseIndex]]
                  * (isArenaMode() ? 0.5 : 1);
   if (GS.phaseTick >= phaseLen) {
@@ -3178,7 +3171,7 @@ function tick() {
     // og stor effekt trigges ved utskrivning (applyRoomEffect)
     if (inm.isolationTicks > 0) {
       delta = 0;
-      inm.isolationTicks -= GS.speed;
+      inm.isolationTicks -= 1;
       if (inm.isolationTicks <= 0) {
         inm.isolationTicks = 0;
         applyRoomEffect(inm);
@@ -6014,13 +6007,6 @@ function updateUI() {
 // ================================================================
 // CONTROLS
 // ================================================================
-document.querySelectorAll('.sb[data-s]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    GS.speed = parseInt(btn.dataset.s);
-    document.querySelectorAll('.sb[data-s]').forEach(b => b.classList.toggle('on', b===btn));
-  });
-});
-
 document.querySelectorAll('.tb').forEach(btn => {
   btn.addEventListener('click', () => {
     const tab = btn.dataset.tab;
@@ -6236,7 +6222,7 @@ const SAVE_KEY = 'fengselsimulator_save';
 
 function saveGame() {
   const data = {
-    day: GS.day, phaseIndex: GS.phaseIndex, phaseTick: GS.phaseTick, speed: GS.speed,
+    day: GS.day, phaseIndex: GS.phaseIndex, phaseTick: GS.phaseTick,
     inmates: GS.inmates.map(inm => ({
       id: inm.id, name: inm.name, cellId: inm.cellId, cellSlot: inm.cellSlot,
       groupId: inm.groupId, kategori: inm.kategori, look: inm.look,
@@ -6286,7 +6272,7 @@ function loadGame() {
   GS.map = buildMap();
   GS.zoneBorders = computeZoneBorders();
   GS.day = data.day; GS.phaseIndex = data.phaseIndex;
-  GS.phaseTick = data.phaseTick; GS.speed = data.speed;
+  GS.phaseTick = data.phaseTick;
   GS.stats = Object.assign(defaultStats(), data.stats || {});
   GS.playerId = data.playerId ?? null;
   GS.gangwarFlashMs = data.gangwarFlashMs ?? 0;
