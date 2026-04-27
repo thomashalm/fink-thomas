@@ -106,6 +106,30 @@ canvas {
              min-width:18px; text-align:right; }
 .ub { height:4px; background:#0e1116; border-radius:2px; overflow:hidden; }
 .uf { height:100%; border-radius:2px; transition:width 0.5s; }
+#glist { padding:4px 0; }
+.vr {
+  display:grid;
+  grid-template-columns: 1fr auto 60px auto auto;
+  align-items:center;
+  gap:6px;
+  padding: 4px 10px;
+  margin: 1px 6px;
+  cursor: pointer;
+  border: 1px solid #1e2228;
+  border-radius: 3px;
+  background: #161a20;
+  font-size: 0.72rem;
+  transition: background 0.12s, border-color 0.12s;
+}
+.vr:hover { background:#1e2430; border-color:#3a4250; }
+.vr.sel  { background:#22293a; border-color:#5cc8e0; box-shadow:0 0 6px rgba(92,200,224,0.18); }
+.vr.dead { cursor:default; opacity:0.45; filter:grayscale(1); }
+.vr.dead:hover { background:#161a20; border-color:#1e2228; }
+.vr-name { color:#ccc; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.vr-id { color:#556; font-size:0.62rem; letter-spacing:1px; }
+.vr-hp { color:#778; font-size:0.66rem; font-family:monospace; min-width:40px; text-align:right; }
+.vr-stat { color:#889; font-size:0.66rem; }
+.vr-dead-badge { color:#a04030; font-size:0.62rem; letter-spacing:1px; font-weight:bold; }
 #detail { border-top:1px solid #1e2228; padding:11px 14px; background:#141820; max-height:50vh; overflow-y:auto; flex-shrink:0; }
 #detail h4 { font-size:0.76rem; color:#c8b460; margin-bottom:6px; }
 .dr { display:flex; justify-content:space-between; font-size:0.73rem; margin:2px 0; }
@@ -176,7 +200,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.16.1 &bull; 2025</p>
+  <p>Panoptikon v0.17.0 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -187,7 +211,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.16.1</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.17.0</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -204,6 +228,7 @@ canvas {
   </div>
   <div id="tabbar">
     <button class="tb on" data-tab="innsatte">Innsatte</button>
+    <button class="tb"    data-tab="vakter">Vakter</button>
     <button class="tb"    data-tab="oversikt">Oversikt</button>
   </div>
   <div class="tabpane" data-tab="oversikt">
@@ -237,6 +262,9 @@ canvas {
       </div>
       <div id="departed-list" style="display:none"></div>
     </div>
+  </div>
+  <div class="tabpane" data-tab="vakter">
+    <div id="glist"></div>
   </div>
   <div class="tabpane on" data-tab="innsatte">
     <div id="inmate-section">
@@ -855,6 +883,7 @@ const GS = {
   selectedGuardId: null,   // gjensidig ekskluderende med selectedId
   hoverId:    null,
   fires:     [],           // aktive branner — array av {tx, ty}
+  _recentDeadGuards: [],   // {id, name, diedAt} — vises som "DØD" i 5s før prune
   listFilter: 'all',    // 'all' | 'iso' | 'con' | 'hot'
   playerId:   null,     // spiller-karakter — settes av fremtidig spiller-feature
   stats: {
@@ -1549,7 +1578,7 @@ const NAME_POOLS = {
 
 // Tilfeldig fornavn+etternavn fra en pool. Faller tilbake til tall-suffiks ved kollisjon.
 function pickUniqueName() {
-  const taken = new Set(GS.inmates.map(i => i.name));
+  const taken = new Set([...GS.inmates.map(i => i.name), ...GS.guards.map(g => g.name).filter(Boolean)]);
   const pools = Object.values(NAME_POOLS);
   for (let attempt = 0; attempt < 500; attempt++) {
     const pool = pools[Math.floor(Math.random() * pools.length)];
@@ -1959,6 +1988,7 @@ class Guard {
     this._seed             = Math.random() * 1000; // stabil seed for breath/idle-sway
     this.playerOrder       = null;  // {px, py} — overstyrer AI; null = ingen ordre
     this.health            = 100;   // tar skade fra brann; cappes ved 1 i v0.16 (ingen død ennå)
+    this.name              = pickUniqueName();
   }
 
   move(dt) {
@@ -3374,6 +3404,7 @@ function tick() {
     if (g.health <= 0) {
       if (GS.selectedGuardId === g.id) GS.selectedGuardId = null;
       if (g.target) g.target.isBeingIntervened = false;
+      GS._recentDeadGuards.push({ id: g.id, name: g.name, diedAt: Date.now() });
       GS.guards.splice(i, 1);
     }
   }
@@ -5916,6 +5947,93 @@ function renderInmateList() {
   }
 }
 
+// Stabil DOM mellom 180ms-tikker: rebuild kun når vakt-settet endres,
+// ellers oppdater verdier in-place. Forhindrer click-loss + hover-blink.
+let _glistSig = null;
+
+function _guardStatus(g, now) {
+  if (g.playerOrder) return 'Følger ordre';
+  if (g.target) {
+    const dx = g.target.px - g.px, dy = g.target.py - g.py;
+    const d  = Math.hypot(dx, dy);
+    return (d < TILE * 1.2 && g.interventionTimer > 0) ? 'Griper inn' : 'På vei mot mål';
+  }
+  if (g._engagedUntil > now && g._lastEngagedStatus) return g._lastEngagedStatus;
+  if (now < g.pauseUntil) return 'Pause';
+  return 'Patruljerer';
+}
+
+function renderGuardList() {
+  const list = document.getElementById('glist');
+  if (!list) return;
+  // Prune dø-vakter eldre enn 5s
+  const now = Date.now();
+  GS._recentDeadGuards = GS._recentDeadGuards.filter(d => now - d.diedAt < 5000);
+
+  if (GS.guards.length === 0 && GS._recentDeadGuards.length === 0) {
+    if (_glistSig !== 'empty') {
+      list.innerHTML = '<div class="ir-empty">Ingen vakter</div>';
+      _glistSig = 'empty';
+    }
+    return;
+  }
+
+  // Signatur: hvilke vakter er til stede (live + nylig døde)
+  const liveIds = GS.guards.map(g => g.id).join(',');
+  const deadIds = GS._recentDeadGuards.map(d => d.id).join(',');
+  const sig = liveIds + '|' + deadIds;
+
+  if (sig !== _glistSig) {
+    // Sett endret — bygg DOM-skjelett på nytt
+    const rows = [];
+    for (const g of GS.guards) {
+      rows.push(
+        `<div class="vr" data-gid="${g.id}">` +
+          `<span class="vr-name">${g.name}</span>` +
+          `<span class="vr-id">${g.id.toUpperCase()}</span>` +
+          `<span class="ub"><span class="uf"></span></span>` +
+          `<span class="vr-hp"></span>` +
+          `<span class="vr-stat"></span>` +
+        `</div>`
+      );
+    }
+    for (const d of GS._recentDeadGuards) {
+      rows.push(
+        `<div class="vr dead">` +
+          `<span class="vr-name">${d.name}</span>` +
+          `<span class="vr-id">${d.id.toUpperCase()}</span>` +
+          `<span class="ub"><span class="uf" style="width:0%;background:#444"></span></span>` +
+          `<span class="vr-hp">0/100</span>` +
+          `<span class="vr-dead-badge">DØD</span>` +
+        `</div>`
+      );
+    }
+    list.innerHTML = rows.join('');
+    _glistSig = sig;
+  }
+
+  // In-place oppdatering av mutable felt på live-rader
+  for (const g of GS.guards) {
+    const row = list.querySelector(`.vr[data-gid="${g.id}"]`);
+    if (!row) continue;
+    const hpPct   = Math.max(0, Math.min(100, g.health));
+    const hpColor = hpPct > 60 ? '#5fa050' : hpPct > 30 ? '#c8a040' : '#c04030';
+    const status  = _guardStatus(g, now);
+    const fill    = row.querySelector('.uf');
+    const hpText  = row.querySelector('.vr-hp');
+    const stText  = row.querySelector('.vr-stat');
+    if (fill) {
+      fill.style.width      = hpPct + '%';
+      fill.style.background = hpColor;
+    }
+    const hpStr = Math.round(hpPct) + '/100';
+    if (hpText && hpText.textContent !== hpStr) hpText.textContent = hpStr;
+    if (stText && stText.textContent !== status) stText.textContent = status;
+    const wantSel = g.id === GS.selectedGuardId;
+    if (row.classList.contains('sel') !== wantSel) row.classList.toggle('sel', wantSel);
+  }
+}
+
 function updateUI() {
   const phase = PHASES[GS.phaseIndex];
   document.getElementById('phase-display').textContent = phase;
@@ -6022,6 +6140,7 @@ function updateUI() {
   // Inmate list — in-place render, filter og stabil sortering
   renderInmateList();
   updateGangCounts();
+  renderGuardList();
 
   // Detail panel
   const sel = GS.inmates.find(i => i.id===GS.selectedId);
@@ -6115,7 +6234,7 @@ function updateUI() {
       ? GS.guards.find(g => g.id === GS.selectedGuardId)
       : null;
     if (selGuard) {
-      const label = 'Vakt ' + selGuard.id.toUpperCase();
+      const label = 'Vakt ' + selGuard.id.toUpperCase() + ' — ' + selGuard.name;
       let status;
       if (selGuard.playerOrder) {
         status = 'Følger ordre';
@@ -6148,7 +6267,7 @@ document.querySelectorAll('.tb').forEach(btn => {
     const tab = btn.dataset.tab;
     document.querySelectorAll('.tb').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.tabpane').forEach(p => p.classList.toggle('on', p.dataset.tab === tab));
-    document.getElementById('detail').style.display = (tab === 'innsatte') ? '' : 'none';
+    document.getElementById('detail').style.display = (tab === 'innsatte' || tab === 'vakter') ? '' : 'none';
   });
 });
 
@@ -6294,6 +6413,17 @@ document.getElementById('ilist').addEventListener('click', e => {
   updateUI();
 });
 
+// Vakt-liste — klikk velger vakt (døde rader er ignorert: ingen data-gid)
+document.getElementById('glist').addEventListener('click', e => {
+  const row = e.target.closest('.vr');
+  if (!row || row.classList.contains('dead')) return;
+  const gid = row.dataset.gid;
+  if (!gid) return;
+  GS.selectedGuardId = (GS.selectedGuardId === gid) ? null : gid;
+  GS.selectedId = null;
+  updateUI();
+});
+
 // Lukk-knapp i detaljpanel
 document.getElementById('detail').addEventListener('click', e => {
   if (e.target.id === 'detail-close') {
@@ -6415,7 +6545,7 @@ function saveGame() {
       lastFightDay: inm.lastFightDay,
       memories: inm.memories,
     })),
-    guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi, health: g.health })),
+    guards: GS.guards.map(g => ({ patrol: g.patrol, pi: g.pi, health: g.health, name: g.name })),
     fires:  GS.fires.slice(),
     stats: { ...GS.stats },
     playerId: GS.playerId,
@@ -6513,6 +6643,7 @@ function loadGame() {
   for (const d of data.guards) {
     const g = new Guard(d.patrol, d.pi);
     if (typeof d.health === 'number') g.health = d.health;
+    if (typeof d.name === 'string')   g.name   = d.name;
     GS.guards.push(g);
   }
   assignGuardIds();
