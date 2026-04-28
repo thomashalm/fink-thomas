@@ -200,7 +200,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.18.1 &bull; 2025</p>
+  <p>Panoptikon v0.18.2 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -211,7 +211,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.18.1</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.18.2</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -3393,7 +3393,34 @@ function tick() {
       }
     }
     // Fjern slukkede branner FØR spredning, så de ikke sprer seg samme tikk
-    GS.fires = GS.fires.filter(f => (f.suppression || 0) < 1);
+    const removedTiles = [];
+    GS.fires = GS.fires.filter(f => {
+      if ((f.suppression || 0) >= 1) {
+        removedTiles.push({ tx: f.tx, ty: f.ty });
+        return false;
+      }
+      return true;
+    });
+    // Etter-slukking-redirect: vakt på slukket tile uten ordre → gå til nabo-brann
+    for (const tile of removedTiles) {
+      for (const g of GS.guards) {
+        if (g.playerOrder) continue;                              // spilleren har siste ord
+        if (((g.px / TILE) | 0) !== tile.tx) continue;
+        if (((g.py / TILE) | 0) !== tile.ty) continue;
+        const neighbors = [
+          { tx: tile.tx,     ty: tile.ty - 1 },
+          { tx: tile.tx,     ty: tile.ty + 1 },
+          { tx: tile.tx - 1, ty: tile.ty     },
+          { tx: tile.tx + 1, ty: tile.ty     },
+        ];
+        for (const n of neighbors) {
+          if (GS.fires.some(f => f.tx === n.tx && f.ty === n.ty)) {
+            g.playerOrder = { px: n.tx * TILE + TILE / 2, py: n.ty * TILE + TILE / 2 };
+            break;
+          }
+        }
+      }
+    }
     // (3) Spredning — snapshot for å forhindre kjedereaksjon i samme tikk
     const snapshot = GS.fires.slice();
     for (const fire of snapshot) {
