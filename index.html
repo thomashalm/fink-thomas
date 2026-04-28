@@ -200,7 +200,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.18.0 &bull; 2025</p>
+  <p>Panoptikon v0.18.1 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -211,7 +211,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.18.0</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.18.1</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -1994,6 +1994,14 @@ class Guard {
   move(dt) {
     this._isMoving = false;
     const lastMan = isArenaMode();
+
+    // Slukker-frys: står på brennende tile uten ny ordre → bli værende.
+    // Spillerens nye ordre (playerOrder satt) overstyrer freeze-grenen under.
+    if (!this.playerOrder) {
+      const tx = (this.px / TILE) | 0;
+      const ty = (this.py / TILE) | 0;
+      if (GS.fires.some(f => f.tx === tx && f.ty === ty)) return;
+    }
 
     // Spillerordre — overstyrer AI helt mens den er aktiv
     if (this.playerOrder) {
