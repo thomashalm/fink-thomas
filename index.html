@@ -200,7 +200,7 @@ canvas {
 <body>
 <div id="menu">
   <h1>Fengselsimulator</h1>
-  <p>Panoptikon v0.17.0 &bull; 2025</p>
+  <p>Panoptikon v0.18.0 &bull; 2025</p>
   <button class="mb" id="btn-new">New Game</button>
   <button class="mb" id="btn-lastman">Last Man Standing</button>
   <button class="mb" id="btn-lastman-shower">Last Man Standing: Let's Take a Shower</button>
@@ -211,7 +211,7 @@ canvas {
 <div id="sidebar">
   <div class="panel" id="hdr">
     <h1>Fengselsimulator v1</h1>
-    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.17.0</div>
+    <div style="font-size:11px;color:#6a7080;margin-top:-2px;margin-bottom:4px;">Panoptikon v0.18.0</div>
     <div id="phase-display">Morgen</div>
     <div id="day-display">Dag 1</div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">
@@ -3374,7 +3374,19 @@ function tick() {
         }
       }
     }
-    // (2) Spredning — snapshot for å forhindre kjedereaksjon i samme tikk
+    // (2) Slukking — vakter på brennende tile øker progresjon (lineært per vakt)
+    for (const fire of GS.fires) {
+      let count = 0;
+      for (const g of GS.guards) {
+        if (((g.px / TILE) | 0) === fire.tx && ((g.py / TILE) | 0) === fire.ty) count++;
+      }
+      if (count > 0) {
+        fire.suppression = (fire.suppression || 0) + count / 6;
+      }
+    }
+    // Fjern slukkede branner FØR spredning, så de ikke sprer seg samme tikk
+    GS.fires = GS.fires.filter(f => (f.suppression || 0) < 1);
+    // (3) Spredning — snapshot for å forhindre kjedereaksjon i samme tikk
     const snapshot = GS.fires.slice();
     for (const fire of snapshot) {
       const neighbors = [
@@ -3388,7 +3400,7 @@ function tick() {
         const tile = GS.map[n.ty]?.[n.tx];
         if (!tile || tile.type === 'wall') continue;
         if (GS.fires.some(f => f.tx === n.tx && f.ty === n.ty)) continue;
-        if (Math.random() < 0.005 && GS.fires.length < 8) GS.fires.push({ tx: n.tx, ty: n.ty });
+        if (Math.random() < 0.005 && GS.fires.length < 8) GS.fires.push({ tx: n.tx, ty: n.ty, suppression: 0 });
       }
     }
   }
@@ -4225,6 +4237,8 @@ function renderFires() {
     const f2 = Math.sin(t * 0.013 + fire.tx * 3.1 + fire.ty * 0.9);
 
     ctx.save();
+    // Slukking fader hele flammen jevnt: 0 = full, 1 = utvisket
+    ctx.globalAlpha = Math.max(0, 1 - (fire.suppression || 0));
     // Mørk base — gjør tilen "kompromittert"
     ctx.fillStyle = 'rgba(20,8,4,0.35)';
     ctx.fillRect(fire.tx * TILE, fire.ty * TILE, TILE, TILE);
@@ -5952,6 +5966,10 @@ function renderInmateList() {
 let _glistSig = null;
 
 function _guardStatus(g, now) {
+  // Slukker tar topp-prioritet — vises når vakten står på en aktiv brann-tile
+  const gtx = (g.px / TILE) | 0;
+  const gty = (g.py / TILE) | 0;
+  if (GS.fires.some(f => f.tx === gtx && f.ty === gty)) return 'Slukker';
   if (g.playerOrder) return 'Følger ordre';
   if (g.target) {
     const dx = g.target.px - g.px, dy = g.target.py - g.py;
@@ -6236,20 +6254,7 @@ function updateUI() {
     if (selGuard) {
       const label = 'Vakt ' + selGuard.id.toUpperCase() + ' — ' + selGuard.name;
       let status;
-      if (selGuard.playerOrder) {
-        status = 'Følger ordre';
-      } else if (selGuard.target) {
-        const dx = selGuard.target.px - selGuard.px;
-        const dy = selGuard.target.py - selGuard.py;
-        const d  = Math.hypot(dx, dy);
-        status = (d < TILE * 1.2 && selGuard.interventionTimer > 0) ? 'Griper inn' : 'På vei mot mål';
-      } else if (selGuard._engagedUntil > Date.now() && selGuard._lastEngagedStatus) {
-        status = selGuard._lastEngagedStatus;
-      } else if (Date.now() < selGuard.pauseUntil) {
-        status = 'Pause';
-      } else {
-        status = 'Patruljerer';
-      }
+      status = _guardStatus(selGuard, Date.now());
       dp.innerHTML = `
         <h4>${label}<span id="detail-close" style="float:right;cursor:pointer;color:#667;font-size:0.9rem;padding:0 4px" title="Lukk (Esc)">×</span></h4>
         <div class="dr"><span class="dl">Status</span><span class="dv">${status}</span></div>`;
@@ -6461,7 +6466,7 @@ document.addEventListener('keydown', e => {
     }
     if (candidates.length === 0) return;
     const pick = candidates[Math.floor(Math.random() * candidates.length)];
-    GS.fires.push(pick);
+    GS.fires.push({ tx: pick.tx, ty: pick.ty, suppression: 0 });
   }
 });
 
